@@ -58,8 +58,8 @@ load_data_files <- function() {
     data_rra = data.table::fread(file.path(data_path, "CRISPR/RRAcombined_fdr.csv")),
     ICB_merge = readRDS(file.path(data_path, "ICB/ICB_merge.rds")),
     ICB_surv = readRDS(file.path(data_path, "ICB/ICB_survival.rds")),
-    MouseToHuman_gene = data.table::fread(file.path(data_path, "Refence_data/Referecen_MouseToHuman_gene.csv")),
-    driver_list = fread(file.path(data_path, "Refence_data/TableS1_compendium_mutational_drivers_clean.csv"))
+    MouseToHuman_gene = data.table::fread(file.path(data_path, "Reference_data/Reference_MouseToHuman_gene.csv")),
+    driver_list = fread(file.path(data_path, "Reference_data/TableS1_compendium_mutational_drivers_clean.csv"))
   )
 }
 

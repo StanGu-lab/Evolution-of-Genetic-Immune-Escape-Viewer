@@ -1,0 +1,53 @@
+histology_abbreviation,Sum,Freq_mut,percent_mut,percent_whole,cell_type,regulator,pathway,pathway_new
+OV,301,13,0.04318936877076412,0.04318936877076412,GammadeltaTcells,neg,Cellular Amino Acid Metabolic Process,Cellular Amino Acid Metabolic Process
+OV,301,9,0.029900332225913623,0.029900332225913623,GammadeltaTcells,neg,Purine Containing Compound Metabolic Process,Purine Containing Compound Metabolic Process
+OV,301,6,0.019933554817275746,0.019933554817275746,GammadeltaTcells,neg,ATP Synthesis Coupled Proton Transport,ATP Synthesis Coupled Proton Transport
+OV,301,8,0.026578073089700997,0.026578073089700997,GammadeltaTcells,pos,Carbohydrate Derivative Transport,Carbohydrate Derivative Transport
+OV,301,8,0.026578073089700997,0.026578073089700997,GammadeltaTcells,pos,Response to Type I Interferon,Response to Type I Interferon
+OV,301,6,0.019933554817275746,0.019933554817275746,GammadeltaTcells,pos,Generation of Precursor Metabolites and Energy,Generation of Precursor Metabolites and Energy
+OV,301,38,0.12624584717607973,0.12624584717607973,MHCregulators,neg,Protein Methylation,Protein Methylation
+OV,301,38,0.12624584717607973,0.12624584717607973,MHCregulators,neg,Regulation of Autophagy (MHC-I),Regulation of Autophagy
+OV,301,34,0.11295681063122924,0.11295681063122924,MHCregulators,neg,Negative Regulation of Catabolic Process,Negative Regulation of Catabolic Process
+OV,301,27,0.08970099667774087,0.08970099667774087,MHCregulators,neg,Glycosylation,Glycosylation
+OV,301,13,0.04318936877076412,0.04318936877076412,MHCregulators,neg,Carbohydrate Biosynthetic Process,Carbohydrate Biosynthetic Process
+OV,301,13,0.04318936877076412,0.04318936877076412,MHCregulators,neg,Histone H4 Acetylation,Histone H4 Acetylation
+OV,301,11,0.036544850498338874,0.036544850498338874,MHCregulators,neg,Cytosolic Transport,Cytosolic Transport
+OV,301,11,0.036544850498338874,0.036544850498338874,MHCregulators,neg,Negative Regulation of TOR Signaling,Negative Regulation of TOR Signaling
+OV,301,7,0.023255813953488372,0.023255813953488372,MHCregulators,neg,Histone Ubiquitination,Histone Ubiquitination
+OV,301,27,0.08970099667774087,0.08970099667774087,MHCregulators,pos,mRNA Splicing Major Pathway,mRNA Splicing Major Pathway
+OV,301,11,0.036544850498338874,0.036544850498338874,MHCregulators,pos,Antigen Presentation via MHC-I,Antigen Presentation via MHC-I
+OV,301,11,0.036544850498338874,0.036544850498338874,MHCregulators,pos,IFNg Signaling (MHC-I),IFNg Signaling
+OV,301,9,0.029900332225913623,0.029900332225913623,MHCregulators,pos,IFNa Pathway,IFNa Pathway
+OV,301,6,0.019933554817275746,0.019933554817275746,MHCregulators,pos,Protein Processing in ER,Protein Processing in ER
+OV,301,8,0.026578073089700997,0.026578073089700997,Macrophages,neg,Respiratory Electron Transport,Respiratory Electron Transport
+OV,301,1,0.0033222591362126247,0.0033222591362126247,Macrophages,neg,O Glycan Processing,O Glycan Processing
+OV,301,1,0.0033222591362126247,0.0033222591362126247,Macrophages,neg,Sialic Acid Metabolism,Sialic Acid Metabolism
+OV,301,11,0.036544850498338874,0.036544850498338874,Macrophages,pos,REG GR Pathway,REG GR Pathway
+OV,301,8,0.026578073089700997,0.026578073089700997,Macrophages,pos,Myeloid Cell Homeostasis,Myeloid Cell Homeostasis
+OV,301,7,0.023255813953488372,0.023255813953488372,Macrophages,pos,Chromatin Disassembly,Chromatin Disassembly
+OV,301,7,0.023255813953488372,0.023255813953488372,Macrophages,pos,HSWI SNF Pathway,HSWI SNF Pathway
+OV,301,12,0.03986710963455149,0.03986710963455149,NKcells,neg,C-Type Lectin Receptor Signaling Pathway,C-Type Lectin Receptor Signaling Pathway
+OV,301,11,0.036544850498338874,0.036544850498338874,NKcells,neg,PD-L1 PD-1 Checkpoint Pathway in Cancer,PD-L1 PD-1 Checkpoint Pathway in Cancer
+OV,301,6,0.019933554817275746,0.019933554817275746,NKcells,neg,Corticosteroid Receptor Signaling Pathway,Corticosteroid Receptor Signaling Pathway
+OV,301,5,0.016611295681063124,0.016611295681063124,NKcells,neg,Antigen Presentation via MHC-Ib,Antigen Presentation via MHC-Ib
+OV,301,5,0.016611295681063124,0.016611295681063124,NKcells,neg,IFNg Pathway (NKcells) ,IFNg Pathway
+OV,301,17,0.05647840531561462,0.05647840531561462,NKcells,pos,Neuroactive Ligand-Receptor Interaction,Neuroactive Ligand-Receptor Interaction
+OV,301,14,0.046511627906976744,0.046511627906976744,NKcells,pos,Necroptosis (NKcells),Necroptosis
+OV,301,8,0.026578073089700997,0.026578073089700997,NKcells,pos,TNF Pathway,TNF Pathway
+OV,301,6,0.019933554817275746,0.019933554817275746,NKcells,pos,Signal Transduction by P53 Class Mediator,Signal Transduction by P53 Class Mediator
+OV,301,3,0.009966777408637873,0.009966777408637873,NKcells,pos,Telomerase Pathway,Telomerase Pathway
+OV,301,2,0.006644518272425249,0.006644518272425249,NKcells,pos,Ceramide Pathway,Ceramide Pathway
+OV,301,34,0.11295681063122924,0.11295681063122924,Tcells,neg,Autophagy (Tcells),Autophagy
+OV,301,34,0.11295681063122924,0.11295681063122924,Tcells,neg,Response to Cytokine Stimulus,Response to Cytokine Stimulus
+OV,301,24,0.07973421926910298,0.07973421926910298,Tcells,neg,DNA Binding TF Activity,DNA Binding TF Activity
+OV,301,17,0.05647840531561462,0.05647840531561462,Tcells,neg,Apoptosis,Apoptosis
+OV,301,17,0.05647840531561462,0.05647840531561462,Tcells,neg,NOD1-2 Signaling Pathway,NOD1-2 Signaling Pathway
+OV,301,11,0.036544850498338874,0.036544850498338874,Tcells,neg,RLR Signaling Pathway,RLR Signaling Pathway
+OV,301,5,0.016611295681063124,0.016611295681063124,Tcells,neg,TNFR1 Pathway,TNFR1 Pathway
+OV,301,3,0.009966777408637873,0.009966777408637873,Tcells,neg,Negative Regulation of  JAK-STAT Receptor,Negative Regulation of  JAK-STAT Receptor
+OV,301,17,0.05647840531561462,0.05647840531561462,Tcells,pos,IFNg Signaling (Tcells),IFNg Signaling
+OV,301,16,0.053156146179401995,0.053156146179401995,Tcells,pos,Necroptosis (Tcells),Necroptosis
+OV,301,11,0.036544850498338874,0.036544850498338874,Tcells,pos,Antigen Presentation via MHC-I,Antigen Presentation via MHC-I
+OV,301,6,0.019933554817275746,0.019933554817275746,Tcells,pos,Hedgehog Ligand Biogenesis,Hedgehog Ligand Biogenesis
+OV,301,6,0.019933554817275746,0.019933554817275746,Tcells,pos,TNF Pathway,TNF Pathway
+OV,301,3,0.009966777408637873,0.009966777408637873,Tcells,pos,RIPK1-Mediated Necrosis,RIPK1-Mediated Necrosis

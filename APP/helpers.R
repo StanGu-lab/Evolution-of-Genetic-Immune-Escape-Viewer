@@ -52,13 +52,12 @@ data_path <- file.path(base_path, "data")
 # Load data
 load_data_files <- function() {
   list(
-    long_data = data.table::fread(file.path(data_path, "CRISPR/GeneMatrix_long.csv")),
     CRISPR_pathways = data.table::fread(file.path(data_path, "CRISPR/C5BP_selected_list.csv")),
     CRISPR_all = data.table::fread(file.path(data_path, "CRISPR/CRISPR_all.csv")),
-    ICB_merge = readRDS(file.path(data_path, "ICB/ICB_merge.rds")),
-    ICB_surv = readRDS(file.path(data_path, "ICB/ICB_survival.rds")),
     data_crispr = data.table::fread(file.path(data_path, "CRISPR/C5BP_all.csv")),
     data_rra = data.table::fread(file.path(data_path, "CRISPR/RRAcombined_fdr.csv")),
+    ICB_merge = readRDS(file.path(data_path, "ICB/ICB_merge.rds")),
+    ICB_surv = readRDS(file.path(data_path, "ICB/ICB_survival.rds")),
     MouseToHuman_gene = data.table::fread(file.path(data_path, "Refence_data/Referecen_MouseToHuman_gene.csv")),
     driver_list = fread(file.path(data_path, "Refence_data/TableS1_compendium_mutational_drivers_clean.csv"))
   )

@@ -25,12 +25,9 @@ ui <- tagList(
                       fluidRow(
                         column(
                           10, offset = 1,
-                          
                           tabsetPanel(
                             id = "intro_tabs",
                             type = "hidden",  # hide tab headers
-                            
-                            # --- Home page ---
                             tabPanel("home",
                                      div(
                                        style = "text-align: center; margin-top: 10px; margin-bottom: 30px; font-style: italic; font-size: 20px; color: #555;",
@@ -179,7 +176,7 @@ ui <- tagList(
                                      tagList(
                                        textAreaInput(
                                          "geneList_ranking", 
-                                         "Enter Gene Symbols (comma or newline separated)", 
+                                         "Enter Gene Symbols (Hugo_Symbol, e.g., B2M; newline separated)", 
                                          value = "",
                                          rows = 8,        
                                          resize = "vertical"
@@ -370,7 +367,7 @@ ui <- tagList(
                      tags$hr(),
                      textAreaInput(
                        "geneList_explore",
-                       "Enter Gene Symbols (comma or newline separated)",
+                       "Enter Gene Symbols (Hugo_Symbol, e.g., TP53; newline separated)",
                        value = "",
                        rows = 8,
                        resize = "vertical"
@@ -584,7 +581,7 @@ server <- function(input, output, session) {
     }
     
     total_width <- min(600 + 30 * study_n, 2000)
-    total_height <- min(500 + 20 * input$immuno_n, 4000)
+    total_height <- min(500 + 35 * input$immuno_n, 4000)
     
     plotlyOutput("immuno_pathway_plot",
                  height = paste0(total_height, "px"),
@@ -605,28 +602,48 @@ server <- function(input, output, session) {
     
     req(nrow(df) > 0)
     
-    plot_freq <- df %>%
+    all_studies <- unique(df$Study_2)
+    
+    # Select top N unique Descriptions
+    top_desc <- df %>%
       arrange(desc(Freq), desc(`-log10(Padj)`)) %>%
       distinct(Description, .keep_all = TRUE) %>%
       slice_head(n = num) %>%
-      select(ID, Description, Freq)
+      pull(Description)
     
-    plot_order <- plot_freq %>% arrange(desc(Freq)) %>% pull(Description)
-    
-    plot_data <- inner_join(plot_freq, df, by = c("ID", "Description")) %>%
+    # Filter data for plotting
+    plot_data <- df %>%
+      filter(Description %in% top_desc) %>%
       mutate(
         tooltip_text = paste0(
           "Genes: ", geneName, "<br>",
-          "FDR: ", format(p.adjust, scientific = TRUE, digits = 3), "<br>", 
+          "FDR: ", format(p.adjust, scientific = TRUE, digits = 3), "<br>",
           "NES: ", round(NES, 1)
-        ),
-        Description = factor(Description, levels = plot_order)
+        )
       )
     
-    plot_data <- plot_data %>%
-      mutate(Description = str_wrap(Description, width = 40)) 
+    # Set y-axis order by Freq
+    plot_order <- df %>%
+      filter(Description %in% top_desc) %>%
+      arrange(desc(Freq)) %>%
+      pull(Description) %>%
+      unique()
     
-    p <- ggplot(plot_data, aes(x = Study_2, y = Description, size = `-log10(Padj)`, text = tooltip_text)) +
+    # Ensure factors for axis ordering and show all Study_2 levels
+    plot_data <- plot_data %>%
+      mutate(
+        Description = factor(Description, levels = plot_order),
+        Description = str_wrap(Description, width = 40),
+        Study_2 = factor(Study_2, levels = all_studies)  # ensures all x-axis labels appear
+      )
+    
+    # Plot
+    p <- ggplot(plot_data, aes(
+      x = Study_2,
+      y = Description,
+      size = `-log10(Padj)`,
+      text = tooltip_text
+    )) +
       geom_point(
         aes(fill = Cell_line),
         shape = 21,
@@ -637,6 +654,8 @@ server <- function(input, output, session) {
       labs(size = "", title = "", x = "", y = "", fill = "Cancer Type") +
       theme_minimal() +
       scale_fill_manual(values = cellline_colors) +
+      scale_x_discrete(drop = FALSE) +  # 👈 ensures all Study_2 labels show even if no data
+      scale_y_discrete(labels = function(x) str_wrap(x, width = 40)) +
       theme(
         axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5, size = 10, color = "black"),
         axis.text.y = element_text(size = 10, color = "black"),
@@ -646,8 +665,7 @@ server <- function(input, output, session) {
         panel.border = element_rect(color = "black", fill = NA, size = 0.5),
         legend.title = element_text(size = 10),
         legend.text = element_text(size = 8)
-      ) +
-      scale_y_discrete(labels = function(x) str_wrap(x, width = 40))
+      )
     
     ggplotly(p, tooltip = "text")
   })
@@ -1201,11 +1219,6 @@ server <- function(input, output, session) {
   })
   
   # Mutation Frequency -- make the onocoplot for the selected gene list
-  maf_obj <- reactive({
-    req(cohort_data())
-    cohort_data()$maf_data
-  })
-  
   # Reactive for selected genes
   # Store selected genes
   selectedGenes <- reactiveVal(character(0))
@@ -1225,7 +1238,8 @@ server <- function(input, output, session) {
   observeEvent(input$submit_genes, {
     if (nzchar(input$geneList_explore)) {
       genes <- unlist(strsplit(input$geneList_explore, "[,\n]")) %>%
-        trimws() %>%
+        trimws() %>%              
+        .[nzchar(.)] %>%
         unique()
       selectedGenes(genes)
     } else {
@@ -1319,33 +1333,77 @@ server <- function(input, output, session) {
     cowplot::plot_grid(plotlist = radar_list, ncol = 3)
   }, res = 60)
   
-  output$oncoplot_ui <- renderUI({
-    req(get_selected_genes())
-    
-    gene_n <- length(get_selected_genes())
-    
-    base_height <- 200    
-    extra_height <- 20  
-    height_cap <- 1200
-    
-    total_height <- min(base_height + extra_height * gene_n, height_cap)
-    
-    plotOutput("oncoplot", height = paste0(total_height, "px"), width = "600px")
+  maf_obj <- reactive({
+    req(cohort_data())
+    cohort_data()$maf_data
   })
   
+  output$oncoplot_ui <- renderUI({
+    # If no cohort loaded, show message instead of empty plot
+    if (is.null(maf_obj())) {
+      return(
+        div(
+          style = "text-align: center; margin-top: 20px;",
+          h4("Please select the cohort on the left button.",
+             style = "color: #555; font-weight: normal;")
+        )
+      )
+    }
+    
+    req(get_selected_genes())
+    gene_n <- length(get_selected_genes())
+    
+    if (gene_n == 1) {
+      # Single gene → lollipop plot
+      plotOutput("oncoplot", height = "400px", width = "600px")
+    } else {
+      # Multiple genes → oncoplot, adjust height dynamically
+      base_height <- 300
+      extra_height <- 20
+      height_cap <- 1200
+      total_height <- min(base_height + extra_height * gene_n, height_cap)
+      
+      plotOutput("oncoplot", height = paste0(total_height, "px"), width = "600px")
+    }
+  })
+  
+  
   output$oncoplot <- renderPlot({
-  req(maf_obj())
-
-  genes_to_plot <- get_selected_genes()
-  req(length(genes_to_plot) > 0)
-
-  oncoplot(
-    maf = maf_obj(),
-    genes = genes_to_plot,
-    bgCol = "#efefef",
-    colors = cols,
-    removeNonMutated = TRUE
-  )
+    tryCatch({
+      req(maf_obj())
+      genes_to_plot <- get_selected_genes()
+      req(length(genes_to_plot) > 0)
+      
+      if (length(genes_to_plot) == 1) {
+        # Use lollipopPlot if only one gene is selected
+        validate(need(genes_to_plot %in% maf_obj()@gene.summary$Hugo_Symbol,
+                      "No mutation data available for this gene"))
+        
+        lollipopPlot(
+          maf = maf_obj(),
+          gene = genes_to_plot,
+          AACol = "HGVSp",    # or "Protein_Change"
+          showMutationRate = TRUE
+        )
+      } else {
+        validate(need(any(genes_to_plot %in% maf_obj()@gene.summary$Hugo_Symbol),
+                      "No mutation data available for selected genes"))
+        
+        oncoplot(
+          maf = maf_obj(),
+          genes = genes_to_plot,
+          bgCol = "#efefef",
+          colors = cols,
+          removeNonMutated = TRUE
+        )
+      }
+    }, error = function(e) {
+      # graceful error fallback
+      ggplot() + theme_void() +
+        annotate("text", x = 0.5, y = 0.5,
+                 label = "No sufficient data",
+                 size = 8, hjust = 0.5)
+    })
   }, res = 100)
   
   # Mutation Timing -- make the density plot for distribution of mutation timing for the selected gene list
@@ -1353,22 +1411,6 @@ server <- function(input, output, session) {
     req(get_selected_genes())
     
     gene_n <- length(get_selected_genes())
-    
-    base_height <- 150
-    extra_height <- 20
-    height_cap <- 1500
-    
-    total_height <- min(base_height + extra_height * gene_n, height_cap)
-    
-    plotOutput("timing_plot_singlegene", height = paste0(total_height, "px"), width = "400px")
-  })
-  
-  # Gene Timing -- density plot for distribution of mutation timing for the selected gene list
-  output$timing_plot_singlegene_ui <- renderUI({
-    req(get_selected_genes())
-    
-    gene_n <- length(get_selected_genes())
-    
     base_height <- 150
     extra_height <- 20
     height_cap <- 1500
@@ -1379,34 +1421,42 @@ server <- function(input, output, session) {
   })
   
   output$timing_plot_singlegene <- renderPlot({
-    req(cohort_data(), get_selected_genes(), input$histology_type_genelist)
-    
-    selected_genes <- get_selected_genes()
-    diff_density <- cohort_data()$diff_allgene %>%
-      filter(Hugo_Symbol %in% selected_genes)
-    
-    if (input$histology_type_genelist != "All") {
+    tryCatch({
+      req(cohort_data(), get_selected_genes(), input$histology_type_genelist)
+      
+      selected_genes <- get_selected_genes()
+      diff_density <- cohort_data()$diff_allgene %>%
+        filter(Hugo_Symbol %in% selected_genes)
+      
+      if (input$histology_type_genelist != "All") {
+        diff_density <- diff_density %>%
+          filter(histology_abbreviation == input$histology_type_genelist)
+      }
+      
+      # If no rows remain
+      validate(need(nrow(diff_density) > 0, "No sufficient data"))
+      
       diff_density <- diff_density %>%
-        filter(histology_abbreviation == input$histology_type_genelist)
-    }
-    
-    diff_density <- diff_density %>%
-      mutate(mean_diff = rowMeans(as.matrix(dplyr::select(., all_of(column_names)))))
-    
-    p <- plot_raincloud(
-      diff_density,
-      x = "Hugo_Symbol",
-      y = "mean_diff",
-      mode = "mean",
-      "",
-      width = 4,
-      height = 5
-    )
-    
-    req(p)
-    p
+        mutate(mean_diff = rowMeans(as.matrix(dplyr::select(., all_of(column_names)))))
+      
+      p <- plot_raincloud(
+        diff_density,
+        x = "Hugo_Symbol",
+        y = "mean_diff",
+        mode = "mean",
+        "",
+        width = 4,
+        height = 5
+      )
+      
+      p
+    }, error = function(e) {
+      ggplot() + theme_void() +
+        annotate("text", x = 0.5, y = 0.5,
+                 label = "No sufficient data",
+                 size = 8, hjust = 0.5)
+    })
   }, res = 70)
-  
   
   # Pathway Timing -- make the density plot for distribution of mean mutation timing for the selected gene list
   output$timing_plot_gene <- renderPlot({
@@ -1752,6 +1802,7 @@ server <- function(input, output, session) {
   })
   
   output$radar_interpretation <- renderUI({
+    req(get_selected_genes())
     HTML(
       paste0(
         "<p><strong>Interpretation:</strong> The Radar plot shows the statistal sigficance of the gene for the immunomodulatory effect. ",
@@ -1768,6 +1819,7 @@ server <- function(input, output, session) {
     HTML("
     <p><strong>Interpretation:</strong> 
     The Oncoplot shows the mutation status of the selected genes across samples. 
+    The results are visuliazed by maftools <a href='https://pubmed.ncbi.nlm.nih.gov/30341162/' target='_blank'>(PMID: 30341162)</a>.
     The mutation information is derived from 
     <a href='https://www.cbioportal.org/' target='_blank'>cBioPortal</a>.
     </p>

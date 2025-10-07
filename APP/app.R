@@ -1023,14 +1023,14 @@ server <- function(input, output, session) {
       
       ggplot() +
         theme_void() +
-        annotate("text", x = 0.5, y = 0.5, label = "No sufficient data", size = 8, hjust = 0.5)
+        annotate("text", x = 0.5, y = 0.5, label = "Insufficient data", size = 8, hjust = 0.5)
       
     }
   
     }, error = function(e) {
       ggplot() +
         theme_void() +
-        annotate("text", x = 0.5, y = 0.5, label = "No sufficient data", size = 8, hjust = 0.5)
+        annotate("text", x = 0.5, y = 0.5, label = "Insufficient data", size = 8, hjust = 0.5)
     })
   })
   
@@ -1077,7 +1077,7 @@ server <- function(input, output, session) {
     } else {
       return(
         ggplot() + theme_void() +
-          annotate("text", x = 0.5, y = 0.5, label = "No sufficient data", size = 8, hjust = 0.5)
+          annotate("text", x = 0.5, y = 0.5, label = "Insufficient data", size = 8, hjust = 0.5)
       )
     }
   })
@@ -1140,7 +1140,7 @@ server <- function(input, output, session) {
     }, error = function(e) {
       ggplot() +
         theme_void() +
-        annotate("text", x = 0.5, y = 0.5, label = "No sufficient data", size = 8, hjust = 0.5)
+        annotate("text", x = 0.5, y = 0.5, label = "Insufficient data", size = 8, hjust = 0.5)
     })
   }, res = 90)
   
@@ -1189,13 +1189,13 @@ server <- function(input, output, session) {
                cell_type = as.factor(cell_type)) %>% 
         filter(cell_type %in% cibercom_cols)
       
-      validate(need(nrow(ciber_long) > 0, "No sufficient data"))
+      validate(need(nrow(ciber_long) > 0, "Insufficient data"))
       
       plot_ciber(ciber_long, histology_type, selected_pathways)
       
     }, error = function(e) {
       ggplot() + theme_void() +
-        annotate("text", x = 0.5, y = 0.5, label = "No sufficient data", size = 8, hjust = 0.5)
+        annotate("text", x = 0.5, y = 0.5, label = "Insufficient data", size = 8, hjust = 0.5)
     })
   })
   
@@ -1401,7 +1401,7 @@ server <- function(input, output, session) {
       # graceful error fallback
       ggplot() + theme_void() +
         annotate("text", x = 0.5, y = 0.5,
-                 label = "No sufficient data",
+                 label = "Insufficient data",
                  size = 8, hjust = 0.5)
     })
   }, res = 100)
@@ -1434,7 +1434,7 @@ server <- function(input, output, session) {
       }
       
       # If no rows remain
-      validate(need(nrow(diff_density) > 0, "No sufficient data"))
+      validate(need(nrow(diff_density) > 0, "Insufficient data"))
       
       diff_density <- diff_density %>%
         mutate(mean_diff = rowMeans(as.matrix(dplyr::select(., all_of(column_names)))))
@@ -1453,7 +1453,7 @@ server <- function(input, output, session) {
     }, error = function(e) {
       ggplot() + theme_void() +
         annotate("text", x = 0.5, y = 0.5,
-                 label = "No sufficient data",
+                 label = "Insufficient data",
                  size = 8, hjust = 0.5)
     })
   }, res = 70)
@@ -1502,7 +1502,7 @@ server <- function(input, output, session) {
           # No data case
           p <- ggplot() + theme_void() +
             annotate("text", x = 0.5, y = 0.5,
-                     label = "No sufficient data",
+                     label = "Insufficient data",
                      size = 8, hjust = 0.5)
         } else {
           # Normal pie chart case
@@ -1527,7 +1527,7 @@ server <- function(input, output, session) {
     }, error = function(e) {
       ggplot() + theme_void() +
         annotate("text", x = 0.5, y = 0.5,
-                 label = "No sufficient data",
+                 label = "Insufficient data",
                  size = 14, hjust = 0.5)
     })
   })
@@ -1585,7 +1585,7 @@ server <- function(input, output, session) {
       
     }, error = function(e) {
       ggplot() + theme_void() +
-        annotate("text", x = 0.5, y = 0.5, label = "No sufficient data", size = 8, hjust = 0.5)
+        annotate("text", x = 0.5, y = 0.5, label = "Insufficient data", size = 8, hjust = 0.5)
     })
   }, res = 90)
   
@@ -1612,7 +1612,7 @@ server <- function(input, output, session) {
     plot_forest_gg(ICB_subset, selected_genes)
     }, error = function(e) {
       ggplot() + theme_void() +
-        annotate("text", x = 0.5, y = 0.5, label = "No sufficient data", size = 8, hjust = 0.5)
+        annotate("text", x = 0.5, y = 0.5, label = "Insufficient data", size = 8, hjust = 0.5)
     })}, res = 100)
   
   # ICB Survival - make the survival for ICB response for the patients with or without mutations in the selected gene list
@@ -1702,7 +1702,7 @@ server <- function(input, output, session) {
     
     }, error = function(e) {
       ggplot() + theme_void() +
-        annotate("text", x = 0.5, y = 0.5, label = "No sufficient data", size = 8, hjust = 0.5)
+        annotate("text", x = 0.5, y = 0.5, label = "Insufficient data", size = 8, hjust = 0.5)
     })
   })
   

@@ -1617,3 +1617,32 @@ plot_selection_rank <- function(gstable, rank_col, score_col_index, title_text,
   
   return(p)
 }
+
+# ---- Helper: Empty message ----
+empty_message <- function(text = "Please select one cohort on the left button.") {
+  div(
+    style = "text-align: center; margin-top: 80px;",
+    h4(text, style = "color: black; font-weight: normal;")
+  )
+}
+
+empty_single_message <- function(text = "Please select one cohort in <b>Mutation Frequency</b> section.") {
+  div(
+    style = "text-align: center; margin-top: 80px;",
+    h4(HTML(text), style = "color: black; font-weight: normal;")
+  )
+}
+
+empty_gene_message <- function(text = "Please input your genes in the left panel.") {
+  div(
+    style = "text-align: center; margin-top: 80px;",
+    h4(text, style = "color: black; font-weight: normal;")
+  )
+}
+
+empty_ICB_message <- function(text = "Please input your genes in the <b>Immunomodulatory Effect</b> section.") {
+  div(
+    style = "text-align: center; margin-top: 80px;",
+    h4(HTML(text), style = "color: black; font-weight: normal;")
+  )
+}

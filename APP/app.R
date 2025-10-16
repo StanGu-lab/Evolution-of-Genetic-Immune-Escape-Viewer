@@ -176,7 +176,7 @@ ui <- tagList(
                                      tagList(
                                        textAreaInput(
                                          "geneList_ranking", 
-                                         "Enter Gene Symbols (Hugo_Symbol, e.g., B2M; newline separated)", 
+                                         "Enter Gene Symbols (Human genes (case sensitive), e.g., B2M ; newline separated)", 
                                          value = "",
                                          rows = 8,        
                                          resize = "vertical"
@@ -251,27 +251,23 @@ ui <- tagList(
                sidebarLayout(
                  sidebarPanel(
                    width = 2,
-                   selectInput("cohort_select", "Select Cohort",
-                               choices = c("PCAWG", "TCGA-OV")),
+                   selectInput(
+                     "cohort_select", "Select Cohort",
+                     choices = c("PCAWG")
+                   ),
                    actionButton("submit_btn", "Select"),
-                   div(style = "margin-top: 15px;"),   # <-- 15px space
+                   div(style = "margin-top: 15px;"),
                    selectInput("cancer_select", "Select Cancer Type",
                                choices = c("All"), selected = "All")
                  ),
                  mainPanel(
-                   conditionalPanel(
-                     condition = "output.loading == true",
-                     h4("Loading data.....", style = "color: #FF5733; text-align:center;")
+                   uiOutput("loading_msg"),  # dynamically shows loading text
+                   fluidRow(
+                     column(width = 9, uiOutput("cohort_summary_left")),
+                     column(width = 3, uiOutput("cohort_summary_right"))
                    ),
-                   tabPanel(
-                     "Select the WGS Datasetss",
-                     fluidRow(
-                       column(width = 9, uiOutput("cohort_summary_left")),
-                       column(width = 3, uiOutput("cohort_summary_right")),
-                       br(),
-                       uiOutput("cohortsummary_interpretation")
-                     )
-                   )
+                   br(),
+                   uiOutput("cohortsummary_interpretation")
                  )
                )
              ),
@@ -283,7 +279,7 @@ ui <- tagList(
                    
                    # Cohort selector for this tab
                    selectInput("escape_cohort_select", "Select Cohort",
-                               choices = c("PCAWG", "TCGA-OV")),
+                               choices = c("PCAWG")),
                    actionButton("escape_submit_btn", "Select"),
                    tags$hr(),
                    # Cell type selector for specific tabs
@@ -327,28 +323,16 @@ ui <- tagList(
                               uiOutput("singlepathway_panel")
                      ),
                      tabPanel("Multiple Pathways",
-                              fluidPage(
-                                withSpinner(plotOutput("radarplot", width = "800px", height = "500px")),
-                                br(),
-                                uiOutput("multipathways_interpretation")
-                              )
+                                uiOutput("multipathway_panel")
                      ),
                      tabPanel("Timeline",
-                              fluidPage(
-                                  withSpinner(plotOutput("timing_plot", width = "1000px", height = "900px"))
-                              ),
-                              br(),
-                              uiOutput("timeline_interpretation")
+                              uiOutput("timeline_panel")
                      ),
                      tabPanel("Survival",
-                              withSpinner(plotOutput("timing_survival_plot", height = "500px", width = "450px")),
-                              br(),
-                              uiOutput("timingsurvival_interpretation")
+                              uiOutput("timingsurvival_panel")
                      ),
                      tabPanel("Immune Cell Infiltration",
-                              withSpinner(plotOutput("ciber_plot", height = "400px", width = "800px")),
-                              br(),
-                              uiOutput("cibersort_interpretation")
+                              uiOutput("ciber_panel")
                      )
                    )
                  )
@@ -359,7 +343,6 @@ ui <- tagList(
                sidebarLayout(
                  sidebarPanel(
                    width = 2,
-                   
                    # Gene list input ONLY for Immunomodulatory Effect tab
                    conditionalPanel(
                      condition = "input.gene_tab_selected == 'Immunomodulatory Effect'",
@@ -367,7 +350,7 @@ ui <- tagList(
                      tags$hr(),
                      textAreaInput(
                        "geneList_explore",
-                       "Enter Gene Symbols (Hugo_Symbol, e.g., TP53; newline separated)",
+                       "Enter Gene Symbols (Human genes (case sensitive), e.g., TP53; newline separated)",
                        value = "",
                        rows = 8,
                        resize = "vertical"
@@ -379,7 +362,7 @@ ui <- tagList(
                    conditionalPanel(
                      condition = "input.gene_tab_selected == 'Mutation Frequency'",
                      selectInput("gene_cohort_select", "Select Cohort",
-                                 choices = c("PCAWG", "TCGA-OV")),
+                                 choices = c("PCAWG")),
                      actionButton("gene_submit_btn", "Select"),
                      tags$hr()
                    ),
@@ -404,30 +387,19 @@ ui <- tagList(
                    tabsetPanel(
                      id = "gene_tab_selected",
                      tabPanel("Immunomodulatory Effect",
-                              div(class = "hcenter", withSpinner(uiOutput("radar_plot_ui"))),
-                              br(),
-                              uiOutput("radar_interpretation")
-                     ),
+                              uiOutput("immunomodulatory_effect_panel")),
                      tabPanel("Mutation Frequency", 
-                              div(class = "hcenter", withSpinner(uiOutput("oncoplot_ui"))), 
-                              br(),
-                              uiOutput("mutation_freq_interpretation")),
-                     tabPanel("Gene Timing", withSpinner(uiOutput("timing_plot_singlegene_ui")), br(), uiOutput("gene_timing_interpretation")),
-                     tabPanel("Pathway Timing", withSpinner(plotOutput("timing_plot_gene", width = "520px", height = "500px")), br(), uiOutput("pathway_timing_gene_interpretation")),
-                     tabPanel("Survival", withSpinner(plotOutput("timing_survival_plot_genelist", height = "500px", width = "450px")), br(), uiOutput("timingsurvival_gene_interpretation")),
+                              uiOutput("mutation_frequency_panel")),
+                     tabPanel("Gene Timing",
+                              uiOutput("gene_timing_panel")),
+                     tabPanel("Pathway Timing", 
+                              uiOutput("pathway_timing_gene_panel")),
+                     tabPanel("Survival", 
+                              uiOutput("timingsurvival_gene_panel")),
                      tabPanel("ICB Response",
-                              div(
-                                style = "margin-top: 0px; padding-top: 0px; display: flex; justify-content: left; align-items: flex-start;",
-                                withSpinner(plotOutput("forestplot", width = "450px", height = "600px"))
-                              ),
-                              br(),
-                              uiOutput("ICBresponse_interpretation")
-                     ),
+                              uiOutput("ICBresponse_panel")),
                      tabPanel("ICB Survival",
-                              withSpinner(uiOutput("ICB_survival_plot")),
-                              br(),
-                              uiOutput("ICBsurvival_interpretation")
-                     )
+                              uiOutput("ICBsurvival_panel"))
                    ),
                    br(),
                    uiOutput("tab_description")
@@ -760,7 +732,7 @@ server <- function(input, output, session) {
         distinct(aliquot_id, histology_abbreviation)
       
       # conditional update
-      if (input$cohort_select %in% c("PCAWG", "TCGA-OV")) {
+      if (input$cohort_select %in% c("PCAWG")) {
         updateSelectInput(
           session, "cancer_select",
           choices = c("All", base::unique(type_list$histology_abbreviation)),
@@ -783,6 +755,10 @@ server <- function(input, output, session) {
   
   # Top-left -- make barplot for sample number for each cancer type
   output$cohort_summary_left <- renderUI({
+    if (is.null(cohort_data()) || is.null(cohort_data()$clinical_data)) {
+      return(empty_message())
+    }
+    
     if (is.null(input$cancer_select) || input$cancer_select == "All") {
       tagList(
         plotOutput("histology_bar", height = "300px"),
@@ -901,6 +877,7 @@ server <- function(input, output, session) {
         plot.margin = margin(30, 30, 30, 30)
       )
   })
+  
   # Right -- make pieplot for sample type and age
   output$cohort_summary_right <- renderUI({
     tagList(
@@ -948,7 +925,7 @@ server <- function(input, output, session) {
       data <- load_escape_data(input$escape_cohort_select)
       incProgress(0.6, detail = "Processing Immune Escape data...")
       
-      cohort_data(data)   # replace reactiveVal with only heavy datasets
+      cohort_data(data) 
       
       incProgress(0.3, detail = "Finalizing...")
       Sys.sleep(0.5)
@@ -988,6 +965,7 @@ server <- function(input, output, session) {
   })
   
   output$top_cancer_plot <- renderPlot({
+    
     tryCatch({
     req(input$cell_type, input$selected_pathways, cohort_data())
     
@@ -1036,6 +1014,7 @@ server <- function(input, output, session) {
   
   # Multiple Pathways -- make Radar Plot for the frequencies of mutations in different pathway across cancers
   output$radarplot <- renderPlot({
+    
     req(cohort_data(), input$cell_type)
     
     validate(need(input$cell_type %in% names(cell_type_files), "Loading..."))
@@ -1735,28 +1714,31 @@ server <- function(input, output, session) {
     req(cohort_data())
     HTML(
       paste0(
-        "<br><strong>PCAWG:</strong> 2658 cancers from Pan-cancer analysis of whole genomes. <a href='https://pubmed.ncbi.nlm.nih.gov/32025007/' target='_blank'>(PMID: 32025007)</a>",
-        "<br><strong>TCGA-OV:</strong> 314 ovarian cancers from latest TCGC-OV WGS cohort. <a href='https://pubmed.ncbi.nlm.nih.gov/21720365/' target='_blank'>(PMID: 21720365)</a>"
+        "<br><strong>PCAWG:</strong> 2658 cancers from Pan-cancer analysis of whole genomes. <a href='https://pubmed.ncbi.nlm.nih.gov/32025007/' target='_blank'>(PMID: 32025007)</a>"
+        #"<br><strong>TCGA-OV:</strong> 314 ovarian cancers from latest TCGC-OV WGS cohort. <a href='https://pubmed.ncbi.nlm.nih.gov/21720365/' target='_blank'>(PMID: 21720365)</a>"
       )
     )
   })
   
   ## Page 4
+  output$singlepathway_panel <- renderUI({
+    if (is.null(cohort_data()$Freq_all)) {
+      return(empty_message())
+    }
+    
+    tagList(
+      withSpinner(plotOutput("top_cancer_plot", width = "400px", height = "400px")),
+      br(),
+      uiOutput("singlepathway_interpretation")
+    )
+  })
+  
   output$singlepathway_interpretation <- renderUI({
     HTML(
       paste0(
         "<p><strong>Interpretation:</strong> The barplot shows the top cancer types with the most frequent mutations in the selected pathway.",
         "<br>The number on the right of each bar represents the number of samples with mutations in that pathway.</p>"
       )
-    )
-  })
-  
-  output$singlepathway_panel <- renderUI({
-    tagList(
-      #h4("Top 10 Cancer Types by Mutation Frequency"),
-      withSpinner(plotOutput("top_cancer_plot", width = "400px", height = "400px")),
-      br(),
-      uiOutput("singlepathway_interpretation")
     )
   })
   
@@ -1768,11 +1750,37 @@ server <- function(input, output, session) {
     )
   })
   
+  output$multipathway_panel <- renderUI({
+    if (is.null(cohort_data()$Freq_all)) {
+      return(empty_message())
+    }
+    
+    tagList(
+      withSpinner(plotOutput("radarplot", width = "800px", height = "500px")),
+      br(),
+      uiOutput("multipathways_interpretation")
+    )
+  })
+  
   output$timeline_interpretation <- renderUI({
     HTML(
       paste0(
         "<p><strong>Interpretation:</strong> The plot shows the mutation timing of immunomodulatory pathways and cancer drivers in selected cancer types.</p>"
       )
+    )
+  })
+  
+  output$timeline_panel <- renderUI({
+    if (is.null(cohort_data()$diff_all)||is.null(cohort_data()$clinical_data)) {
+      return(empty_message())
+    }
+    
+    tagList(
+      fluidPage(
+        withSpinner(plotOutput("timing_plot", width = "1000px", height = "900px"))
+      ),
+      br(),
+      uiOutput("timeline_interpretation")
     )
   })
   
@@ -1784,6 +1792,18 @@ server <- function(input, output, session) {
         "<br><strong>Mut_Early:</strong> Samples where more than 50% of the 250 timing difference samplings are less than 0.",
         "<br><strong>Mut_Late:</strong> Samples where more than 50% of the 250 timing difference samplings are greater than 0."
       )
+    )
+  })
+  
+  output$timingsurvival_panel <- renderUI({
+    if (is.null(cohort_data()$diff_all)||is.null(cohort_data()$clinical_data)||is.null(cohort_data()$surv_data)) {
+      return(empty_message())
+    }
+    
+    tagList(
+      withSpinner(plotOutput("timing_survival_plot", height = "500px", width = "450px")),
+      br(),
+      uiOutput("timingsurvival_interpretation")
     )
   })
   
@@ -1801,6 +1821,18 @@ server <- function(input, output, session) {
     )
   })
   
+  output$ciber_panel <- renderUI({
+    if (is.null(cohort_data()$diff_all)||is.null(cohort_data()$clinical_data)||is.null(cohort_data()$ciber_all)) {
+      return(empty_message())
+    }
+    
+    tagList(
+      withSpinner(plotOutput("ciber_plot", height = "400px", width = "800px")),
+      br(),
+      uiOutput("cibersort_interpretation")
+    )
+  })
+  
   output$radar_interpretation <- renderUI({
     req(get_selected_genes())
     HTML(
@@ -1811,6 +1843,18 @@ server <- function(input, output, session) {
         "<br><strong>Score < 0:</strong> If the negative ranking is higher than postive ranking, then the score is set as negative. The gene is considered as the negative regulator for the immunomodulatory effect.",
         "<br><strong>P_value:</strong> The statistical sigficance of each gene is calculated by Hommel’s method. The pos|fdr and neg|fdr are used for calculating overall p-values from multiple tests. * : P < 0.1; ** : P < 0.01; *** : P < 0.001. The statistical method is adapted from the previous work. <a href='https://pubmed.ncbi.nlm.nih.gov/40023158/' target='_blank'>(PMID: 40023158)</a>"
       )
+    )
+  })
+  
+  output$immunomodulatory_effect_panel <- renderUI({
+    if (length(get_selected_genes()) == 0) {
+      return(empty_gene_message())
+    }
+    
+    tagList(
+      div(class = "hcenter", withSpinner(uiOutput("radar_plot_ui"))),
+      br(),
+      uiOutput("radar_interpretation")
     )
   })
   
@@ -1826,6 +1870,18 @@ server <- function(input, output, session) {
   ")
   })
   
+  output$mutation_frequency_panel <- renderUI({
+    if (is.null(cohort_data()$maf_data)) {
+      return(empty_message())
+    }
+    
+    tagList(
+      div(class = "hcenter", withSpinner(uiOutput("oncoplot_ui"))), 
+      br(),
+      uiOutput("mutation_freq_interpretation")
+    )
+  })
+  
   output$gene_timing_interpretation <- renderUI({
     HTML(
       paste0(
@@ -1836,6 +1892,18 @@ server <- function(input, output, session) {
     )
   })
   
+  output$gene_timing_panel <- renderUI({
+    if (is.null(cohort_data()$diff_allgene)) {
+      return(empty_single_message())
+    }
+    
+    tagList(
+      withSpinner(uiOutput("timing_plot_singlegene_ui")), 
+      br(), 
+      uiOutput("gene_timing_interpretation")
+    )
+  })
+  
   output$pathway_timing_gene_interpretation <- renderUI({
     HTML(
       paste0(
@@ -1843,6 +1911,18 @@ server <- function(input, output, session) {
         "<br><span style='color:green;'><strong>Green</strong></span> indicates samples with mutations likely occurring early (based on the proportion of timing values less than 0).",
         "<br><span style='color:purple;'><strong>Purple</strong></span> indicates samples with mutations likely occurring late (based on the proportion of timing values greater than 0).</p>"
       )
+    )
+  })
+  
+  output$pathway_timing_gene_panel <- renderUI({
+    if (is.null(cohort_data()$diff_allgene)) {
+      return(empty_single_message())
+    }
+    
+    tagList(
+      withSpinner(plotOutput("timing_plot_gene", width = "520px", height = "500px")), 
+      br(), 
+      uiOutput("pathway_timing_gene_interpretation")
     )
   })
   
@@ -1857,6 +1937,18 @@ server <- function(input, output, session) {
     )
   })
   
+  output$timingsurvival_gene_panel <- renderUI({
+    if (is.null(cohort_data()$diff_allgene)) {
+      return(empty_single_message())
+    }
+    
+    tagList(
+      withSpinner(plotOutput("timing_survival_plot_genelist", height = "500px", width = "450px")), 
+      br(), 
+      uiOutput("timingsurvival_gene_interpretation")
+    )
+  })
+  
   output$ICBresponse_interpretation <- renderUI({
     HTML(
       paste0(
@@ -1867,12 +1959,39 @@ server <- function(input, output, session) {
     )
   })
   
+  output$ICBresponse_panel <- renderUI({
+    if (is.null(cohort_data()$diff_allgene)) {
+      return(empty_ICB_message())
+    }
+    
+    tagList(
+      div(
+        style = "margin-top: 0px; padding-top: 0px; display: flex; justify-content: left; align-items: flex-start;",
+        withSpinner(plotOutput("forestplot", width = "450px", height = "600px"))
+      ),
+      br(),
+      uiOutput("ICBresponse_interpretation")
+    )
+  })
+  
   output$ICBsurvival_interpretation <- renderUI({
     HTML(
       paste0(
         "<p><strong>Interpretation:</strong> The Kaplan-Meier (KM) plot shows overall survival outcomes for samples with or without mutations in the selected genes.",
         "<br>For more details, please refer to the summary table. </p>"
       )
+    )
+  })
+  
+  output$ICBsurvival_panel <- renderUI({
+    if (is.null(cohort_data()$diff_allgene)) {
+      return(empty_ICB_message())
+    }
+    
+    tagList(
+      withSpinner(uiOutput("ICB_survival_plot")),
+      br(),
+      uiOutput("ICBsurvival_interpretation")
     )
   })
   

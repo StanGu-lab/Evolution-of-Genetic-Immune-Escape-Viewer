@@ -1,0 +1,88 @@
+---
+title: "3_2_1_CRISPR"
+author: "AJ"
+date: "2023-11-24"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+---
+title: "MAGeCKFlute"
+author: "AJ"
+date: "2023-08-27"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE)
+```
+
+# 1. Load Packages
+```{r}
+rm(list = ls())
+
+library("dndscv")
+library("data.table")
+library("dplyr")
+library("readr")
+library("tidyr")
+library("stringr")
+library("ggplot2")
+
+source(".../Project/code/source/basic.R")
+source(".../Project/code/source/plot_dnnsall.R")
+
+PCAWG_path <- "/rsrch6/scratch/hema_bio-Malignan/wchen20/PCAWG"
+PCAWG_path <- ".../Project"
+figure_path <- ".../Project/Figures/20240827/"
+
+LOH_MSI = LOH_mut <- fread(paste0(PCAWG_path, "/donors_and_biospecimens/LOH_MSI_final.csv"))
+LOH_type <- LOH_MSI %>% mutate(sample_id = aliquot_id) %>% dplyr::select(sample_id, histology_abbreviation)
+LOH_aliquot <- LOH_MSI %>% mutate(sample_id = aliquot_id) %>% dplyr::select(sample_id, icgc_sample_id, MSI_mut)
+LOH_MSS <- LOH_MSI %>% filter(MSI_mut == "MSS")
+sample_MSS <- LOH_MSS  %>% pull(aliquot_id)
+
+sample_MSS <- LOH_MSS %>% pull(aliquot_id)
+sample_tcgaMSS <- LOH_MSI %>% filter(proj == "tcga", MSI_mut == "MSS") %>% pull(aliquot_id)
+
+rename_list <- fread(".../Project/CRISPR/CRISPRscreen20240118/rename_list.csv")
+rename_list$pathway <- str_to_title(rename_list$pathway)
+```
+
+```{r}
+wt_included <- "no"
+histology_type <- "Skin-Melanoma"
+selected_pathways <- "Autophagy (Tcells)"
+      
+data_survival <- fread("/Users/wchen20/Desktop/Website/Shiny/EvoGIE_beta/data/Cohorts/PCAWG/survival_PCAWG.csv")
+diff_all <- fread(".../Project/MHC_evolution/GRITIC/output/250717/summary250717/diff_all.csv") %>%
+        mutate(Timing_group = case_when(early_ratio > 0.5 ~ "Mut_Early",
+                                        late_ratio > 0.5 ~ "Mut_Late",
+                                        TRUE ~ "Undetermined")) %>%
+        filter(Timing_group != "Undetermined")
+      
+      sample_survival <- base::unique(data_survival$aliquot_id)
+      diff_all <- diff_all %>% filter(aliquot_id %in% sample_survival)
+      
+      data_survival_sub <- if (histology_type == "All") data_survival else filter(data_survival, histology_abbreviation == histology_type)
+      diff_all_sub <- if (histology_type == "All") diff_all else filter(diff_all, histology_abbreviation == histology_type)
+      
+      filtered_data <- diff_all_sub %>%
+        filter(pathway == selected_pathways) %>%
+        left_join(data_survival_sub, .,by = "aliquot_id") %>%
+        mutate(
+          Timing_group = ifelse(is.na(Timing_group), "WT", Timing_group),
+          Timing_group = factor(Timing_group, levels = c("WT", "Mut_Early", "Mut_Late"))
+        )
+      
+plot_KM <- plot_survival_by_timing(
+        filtered_data = filtered_data,
+        wt_included = "no",
+        title_prefix = ""
+      )
+
+ggsave("/Users/wchen20/Desktop/Poster/2025/Autophagy_KM.pdf", plot_KM, width = 5, height = 5)
+```

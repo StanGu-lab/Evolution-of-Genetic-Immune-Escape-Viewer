@@ -1,0 +1,1497 @@
+---
+title: "2_3_Complex_Timing_of_Gains_Timelinedrivergene240806"
+author: "AJ"
+date: "2024-08-06"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# 0. Load packacges
+```{r}
+rm(list = ls())
+
+library("stringr")
+library("dplyr")
+library("patchwork")
+library("ggpubr")
+library("ggridges")
+library("truncnorm")
+library("tidyr")
+library("scatterpie")
+library("tidyselect")
+library("pillar")
+library("data.table")
+library("readr")
+library("ggplot2")
+library("openxlsx")
+library("ggrepel")
+library("tibble")
+library("textshape")
+library("matrixStats")
+
+source(".../Project/code/source/basic.R")
+source(".../Project/code/source/insert_newlines.R")
+source(".../Project/code/source/plot_segTiming.R")
+
+## Path
+PCAWG_path <- "/rsrch6/scratch/hema_bio-Malignan/wchen20/PCAWG"
+PCAWG_path <- ".../Project"
+gritic_path <- paste0(PCAWG_path, "/MHC_evolution/GRITIC/output")
+
+## Clinical data
+LOH_MSI = LOH_mut <- fread(paste0(PCAWG_path, "/donors_and_biospecimens/LOH_MSI_final.csv"))
+
+LOH_type <- LOH_MSI %>% mutate(sample_id = aliquot_id) %>% dplyr::select(sample_id, histology_abbreviation)
+LOH_aliquot <- LOH_MSI %>% mutate(sample_id = aliquot_id) %>% dplyr::select(sample_id, icgc_sample_id, MSI_mut)
+sample_MSS <- LOH_MSI %>% filter(MSI_mut == "MSS") %>% pull(aliquot_id)
+type_list <- LOH_MSI %>% dplyr::select(aliquot_id, histology_abbreviation)
+
+## Timing of segment gain
+#seg <- fread(paste0(PCAWG_path, "/MHC_evolution/GRITIC/output/SNV_timing/wenjie_posterior_pcawg.tsv"))
+
+## Timing of WGD
+wgd_median <- fread(".../Project/MHC_evolution/GRITIC/output/wgd_median.csv") %>% dplyr::select(wgd_mediantiming, sample_id)
+
+## Timing of non-synonymous mutations
+nonsyn_filter_nonPloy <- fread(".../Project/MHC_evolution/GRITIC/output/filter/griticnon_filterclonal.tsv") %>%
+  dplyr::select(-matches("\\.y$"), -Sample) %>%
+  rename_with(~ str_replace_all(., "\\.x$", "")) %>% 
+  filter(sample_id %in% sample_MSS)
+
+sample_sucess <- unique(nonsyn_filter_nonPloy$sample_id)
+
+## Save Path
+gritic_path = ".../Project/MHC_evolution/GRITIC/output/250717/summary250717/"
+path_timeline = ".../Project/MHC_evolution/GRITIC/output/250717/summary250717/timeline/"
+```
+
+# Update Polysover Timing
+## Sample with HLA mutations
+```{r}
+maf_tcga <- fread(".../Project/MHC_evolution/HLAmutations/results/maf_tcga_HLAmut_final.maf")
+maf_icgc <- fread(".../Project/MHC_evolution/HLAmutations/results/maf_icgc_HLAmut_final.maf")
+
+## 71 HLA mutations in 61 samples
+HLAall <- rbind(maf_tcga, maf_icgc, fill=TRUE) 
+sample_HLA <- HLAall %>% pull(Sample) %>% unique()
+
+## 57 SNVs in 61 samples
+sample_HLAsnv <- HLAall %>% filter(!Variant_Classification %in% c("Frame_Shift_Del", "Frame_Shift_Ins", "In_Frame_Del", "In_Frame_Ins")) %>% 
+  pull(Sample) %>% unique()
+length(sample_HLAsnv)
+
+## 5 Indels in 61 samples
+sample_HLAindel <- HLAall %>% filter(Variant_Classification %in% c("Frame_Shift_Del", "Frame_Shift_Ins", "In_Frame_Del", "In_Frame_Ins")) %>% 
+  pull(Sample) %>% unique()
+length(sample_HLAindel)
+
+## 60 HLA mutations in 52 MSS samples
+HLAallMSS <- rbind(maf_tcga, maf_icgc, fill=TRUE) %>% 
+  filter(Sample %in% sample_MSS)
+sample_HLAMSS <- HLAallMSS  %>% pull(Sample) %>% unique()
+
+## 57 SNVs in 50 samples
+sample_HLAsnv <-HLAallMSS %>% filter(!Variant_Classification %in% c("Frame_Shift_Del", "Frame_Shift_Ins", "In_Frame_Del", "In_Frame_Ins")) %>% 
+  pull(Sample) %>% unique()
+length(sample_HLAsnv)
+
+## 3 Indels in 3 samples
+sample_HLAindel <- HLAallMSS %>% filter(Variant_Classification %in% c("Frame_Shift_Del", "Frame_Shift_Ins", "In_Frame_Del", "In_Frame_Ins")) %>% 
+  pull(Sample) %>% unique()
+length(sample_HLAindel)
+
+## HLA mutations
+gritic_path_dict <- ".../Project/MHC_evolution/GRITIC/output/250717/summary250717/dict"
+file_list <- list.files(path = gritic_path_dict, pattern = "*mafnongritic.csv", full.names = TRUE)
+length(file_list)
+
+gritic_SNV <- list()
+
+for (file in file_list) {
+  
+  aliquot_id = basename(file)
+  aliquot_id = sub("_mafnongritic.csv", "", aliquot_id)
+  
+  gritic_SNV[[aliquot_id]] <- fread(file) %>% mutate(aliquot_id = aliquot_id)
+  
+}
+
+# Check -- 9 sample not in 2658 samples and sample_MSS
+nonsyn_filter_HLA <- gritic_SNV %>% rbindlist(fill=TRUE) %>% 
+  inner_join(., LOH_MSI, by = "aliquot_id") %>% 
+  mutate(sample_id = aliquot_id) %>% 
+  filter(aliquot_id %in% sample_MSS) 
+length(unique(nonsyn_filter_HLA$aliquot_id))
+
+# Check -- 2 sample with only indels
+sample_HLAtiming <- nonsyn_filter_HLA %>% filter(Hugo_Symbol %in% c("HLA-A", "HLA-B", "HLA-C"))
+length(unique(sample_HLAtiming$aliquot_id))
+
+# Rename coloumns
+col_names <- colnames(nonsyn_filter_HLA)
+numeric_cols <- grep("^[0-9]+$", col_names)
+col_names[numeric_cols] <- paste0("X", col_names[numeric_cols])
+colnames(nonsyn_filter_HLA) <- col_names
+length(unique(nonsyn_filter_HLA$Tumor_Sample_Barcode))
+nonsyn_filter_HLA <- nonsyn_filter_HLA %>% filter(!is.na(X249))
+dim(nonsyn_filter_HLA)
+length(unique(nonsyn_filter_HLA$aliquot_id))
+
+nonsyn_filter_HLA <- nonsyn_filter_HLA %>% 
+  left_join(wgd_median, by = "sample_id") %>%
+  mutate(has_NA_in_X = apply(.[, paste0("X", 0:249)], 1, anyNA),
+         subclonal_ratio = if_else(has_NA_in_X, NA_real_, apply(.[, paste0("X", 0:249)], 1, function(x) mean(x == 1.01, na.rm = TRUE))),
+         lateclonal_ratio = if_else(has_NA_in_X, NA_real_, apply(.[, paste0("X", 0:249)], 1, function(x, wgd) mean(x < 1.01 & x > wgd, na.rm = TRUE), wgd_mediantiming)),
+         earlyclonal_ratio = if_else(has_NA_in_X, NA_real_, apply(.[, paste0("X", 0:249)], 1, function(x, wgd) mean(x < wgd, na.rm = TRUE), wgd_mediantiming)),
+         timing_gritic = case_when(subclonal_ratio > 0.5 ~ "subclonal",
+                                   subclonal_ratio <= 0.5 & !is.na(wgd_mediantiming) & lateclonal_ratio > 0.5 ~ "clonal[late]",
+                                   subclonal_ratio <= 0.5 & !is.na(wgd_mediantiming) & earlyclonal_ratio > 0.5 ~ "clonal[early]",
+                                   subclonal_ratio <= 0.5 & !is.na(wgd_mediantiming) & lateclonal_ratio <= 0.5 & earlyclonal_ratio <= 0.5 ~ "clonal[NA]",
+                                   subclonal_ratio <= 0.5 & is.na(wgd_mediantiming) ~ "clonal[NA]",
+                                   has_NA_in_X ~ NA_character_,
+                                   TRUE ~ NA_character_))
+
+length(unique(nonsyn_filter_HLA$sample_id))
+sample_HLA <- unique(nonsyn_filter_HLA$sample_id)
+
+nonsyn_filter_HLA_check <- nonsyn_filter_HLA %>% filter(sample_id %in% sample_sucess)
+length(unique(nonsyn_filter_HLA_check$sample_id))
+```
+
+## Update all
+```{r}
+length(unique(nonsyn_filter_nonPloy$aliquot_id))
+
+nonsyn_filter_nonHLA <- nonsyn_filter_nonPloy %>% 
+  filter(!aliquot_id %in% sample_HLA) %>% 
+  filter(!Hugo_Symbol %in% c("HLA-A", "HLA-B", "HLA-C"))
+length(unique(nonsyn_filter_nonHLA$aliquot_id))
+
+nonsyn_filter <- rbind(nonsyn_filter_nonHLA, nonsyn_filter_HLA, fill=TRUE) %>% 
+  filter(aliquot_id %in% sample_MSS)
+write.csv(nonsyn_filter, paste0(gritic_path, "/nonsyn_filter.csv"), row.names = F) 
+
+nonsyn_filter <- fread(paste0(gritic_path, "/nonsyn_filter.csv"))
+```
+
+# Timeline - Mutations in driver genes
+## Generate Background Timing by driver genes
+```{r}
+timing_driverbackground <- nonsyn_filter %>%
+  filter(Hugo_Symbol %in% driver_gene) %>%
+  group_by(sample_id) %>%
+  summarise(across(all_of(column_names), ~ mean(., na.rm = TRUE)), .groups = "drop") %>%
+  mutate(event = "Background_p.A581V", 
+         Hugo_Symbol = "Background", 
+         Other_Info = NA) %>%
+  dplyr::select(c("sample_id", "Hugo_Symbol", "event", everything())) %>% 
+  mutate(aliquot_id = sample_id,
+         mean_background = rowMeans(as.matrix(dplyr::select(., all_of(column_names)))),
+         median_background = rowMedians(as.matrix(dplyr::select(., all_of(column_names))))) %>% 
+  filter(!is.na(mean_background))
+
+write_csv(timing_driverbackground, paste0(gritic_path, "/timing_driverbackground.csv"))
+```
+
+## Driver genes
+### Timing of driver gene 
+```{r}
+timing_drivergene <- nonsyn_filter %>%
+  filter(Hugo_Symbol %in% !!driver_gene) %>%
+  group_by(Hugo_Symbol, sample_id) %>%
+  summarise(across(column_names, ~ mean(., na.rm = TRUE)), .groups = "drop") %>%
+  mutate(event = Hugo_Symbol,
+         Other_Info = NA) %>%
+  dplyr::select(c("sample_id", "Hugo_Symbol", "event", everything())) %>% 
+  mutate(aliquot_id = sample_id,
+         mean_timing = rowMeans(as.matrix(dplyr::select(., all_of(column_names)))),
+         median_timing = rowMedians(as.matrix(dplyr::select(., all_of(column_names)))),
+         pathway = Hugo_Symbol,
+         regulator = "Driver") %>% 
+  filter(!is.na(mean_timing)) 
+
+write_csv(timing_drivergene, paste0(gritic_path, "/timing_drivergene.csv"))
+```
+
+### Deviation of driver genes
+```{r}
+df_background <- fread(paste0(gritic_path, "/timing_driverbackground.csv")) %>% 
+  filter(!is.na(mean_background)) %>%
+  mutate(mean_timing = mean_background,
+         median_timing = median_background,
+         pathway = event,
+         regulator = "backgound") %>%
+  dplyr::select(c("sample_id", "Hugo_Symbol", "event", "Other_Info", everything()), -mean_background, -median_background)
+
+df_columns <- names(df_background)
+
+df_driver <- fread(paste0(gritic_path, "/timing_drivergene.csv")) %>%
+  dplyr::select(c("sample_id", "Hugo_Symbol", "event", "Other_Info", everything()))
+
+df_final <- rbind(df_background, df_driver) 
+
+## Compare the genes with background one by one
+diff_driver <- list()
+
+sample_list <- unique(df_final$sample_id)
+
+for (sample in sample_list) {
+    
+    subset <- df_final %>% filter(sample_id %in% sample) %>% dplyr::select(sample_id, Hugo_Symbol, X0:X249)
+    genes <- unique(subset$Hugo_Symbol)
+    genes <- genes[genes != "Background"]
+    
+    if(length(genes) > 0) {
+      
+      for (gene in genes) {
+          
+          gene1_data <- subset %>% filter(Hugo_Symbol == !!gene) %>% dplyr::select(X0:X249)
+          gene2_data <- subset %>% filter(Hugo_Symbol == "Background") %>% dplyr::select(X0:X249)
+          
+          diff_values <- gene1_data - gene2_data
+          
+          pair <- paste0(sample, "_", gene)
+          
+          print(pair)
+          
+          diff_driver[[pair]] <- cbind(sample_id = sample, event1 = gene, diff_values)
+
+      }
+    }
+  }
+  
+diff_drivergene <- rbindlist(diff_driver, fill = TRUE) 
+write.csv(diff_drivergene, file = paste0(gritic_path, "/timing_pair_drivergene.csv"), row.names = F)
+
+diff_drivergene <- fread(paste0(gritic_path, "/timing_pair_drivergene.csv")) %>% 
+  mutate(aliquot_id = sample_id,
+         pathway = event1,
+         regulator = "Driver",
+         mean_diff = rowMeans(as.matrix(dplyr::select(., all_of(column_names)))),
+         median_diff = rowMedians(as.matrix(dplyr::select(., all_of(column_names))))) %>% 
+  left_join(., LOH_type, by = "sample_id")
+write_csv(diff_drivergene, paste0(gritic_path, "/diff_drivergene.csv"))
+
+diff_drivergene_simple <- diff_drivergene %>%
+  dplyr::select(sample_id, pathway, histology_abbreviation, mean_diff, regulator)
+write_csv(diff_drivergene_simple, paste0(gritic_path, "/diff_drivergene_simple.csv"))
+```
+
+## All Mutations
+### Generate all mutations Timing
+```{r}
+timing_allmutations <- nonsyn_filter %>% 
+  mutate(event = paste0(Hugo_Symbol, "_", POS, "_", HGVSp_Short)) %>%
+  group_by(event, sample_id) %>%
+  summarise(across(column_names, ~ mean(., na.rm = TRUE)), .groups = "drop") %>%
+  mutate(Other_Info = NA,
+         Hugo_Symbol = event) %>%
+  dplyr::select(c("sample_id", "Hugo_Symbol", "event", everything())) %>% 
+  mutate(aliquot_id = sample_id,
+         mean_timing = rowMeans(as.matrix(dplyr::select(., all_of(column_names)))),
+         median_timing = rowMedians(as.matrix(dplyr::select(., all_of(column_names)))),
+         pathway = Hugo_Symbol,
+         regulator = "Mutation") %>% 
+  filter(!is.na(mean_timing))
+
+write_csv(timing_allmutations, paste0(gritic_path, "/timing_allmutations.csv"))
+```
+
+### Deviation of all mutations
+```{r}
+df_background <- fread(paste0(gritic_path, "/timing_driverbackground.csv")) %>% 
+  filter(!is.na(mean_background)) %>%
+  mutate(mean_timing = mean_background,
+         median_timing = median_background,
+         pathway = event,
+         regulator = "backgound") %>%
+  dplyr::select(c("sample_id", "Hugo_Symbol", "event", "Other_Info", everything()), -mean_background, -median_background)
+
+df_columns <- names(df_background)
+
+df_driver <- fread(paste0(gritic_path, "/timing_allmutations.csv")) %>% mutate(Hugo_Symbol = event) %>%
+  dplyr::select(c("sample_id", "Hugo_Symbol", "event", "Other_Info", everything())) %>%
+  dplyr::select(all_of(df_columns))
+
+sample_background <- unique(df_background$sample_id)
+sample_mut <- unique(df_driver$sample_id)
+sample_comm <- intersect(sample_background, sample_mut)
+
+df_final <- rbind(df_background, df_driver) %>% filter(sample_id %in% sample_comm) %>%
+  distinct()
+
+## Compare the genes with background one by one
+diff_driver <- list()
+
+sample_list <- unique(df_final$sample_id)
+
+for (sample in sample_list) {
+    
+    subset <- df_final %>% filter(sample_id %in% sample) %>% dplyr::select(sample_id, Hugo_Symbol, X0:X249)
+    genes <- unique(subset$Hugo_Symbol)
+    genes <- genes[genes != "Background"]
+    
+    if(length(genes) > 0) {
+      
+      for (gene in genes) {
+          
+          gene1_data <- subset %>% filter(Hugo_Symbol == !!gene) %>% dplyr::select(X0:X249)
+          gene2_data <- subset %>% filter(Hugo_Symbol == "Background") %>% dplyr::select(X0:X249)
+          
+          diff_values <- gene1_data - gene2_data
+          
+          pair <- paste0(sample, "_", gene)
+          
+          print(pair)
+          
+          diff_driver[[pair]] <- cbind(sample_id = sample, event1 = gene, diff_values)
+
+      }
+    }
+  }
+  
+diff_allmutations <- rbindlist(diff_driver, fill = TRUE) 
+write.csv(diff_allmutations, file = paste0(gritic_path, "/timing_pair_allmutations.csv"), row.names = F)
+
+diff_allmutations <- fread(paste0(gritic_path, "/timing_pair_allmutations.csv")) %>%
+  mutate(aliquot_id = sample_id,
+         pathway = event1,
+         regulator = "Driver",
+         mean_diff = rowMeans(as.matrix(dplyr::select(., all_of(column_names)))),
+         median_diff = rowMedians(as.matrix(dplyr::select(., all_of(column_names))))) %>% 
+    left_join(., LOH_MSI, by = "aliquot_id")
+write_csv(diff_allmutations, paste0(gritic_path, "/diff_allmutations.csv"))
+
+diff_allmutations_simple <- diff_allmutations %>% 
+  dplyr::select(sample_id, pathway, histology_abbreviation, mean_diff, regulator)
+write_csv(diff_drivergene_simple, paste0(gritic_path, "/diff_allmutations_simple.csv"))
+```
+
+### all genes
+```{r}
+cutoff_mut = 0.6
+cutoff_pathway = 0.5
+cutoff_ratio = 2
+
+data <- fread(paste0(gritic_path, "/diff_allmutations.csv")) %>% 
+  mutate(Hugo_Symbol = sub("_.*", "", event1),
+         sample_id = aliquot_id) %>%
+  group_by(sample_id, Hugo_Symbol) %>%
+  summarise(across(all_of(column_names), ~ mean(., na.rm = TRUE)), .groups = "drop") %>%
+  mutate(pathway = Hugo_Symbol,
+         early_ratio = rowMeans(dplyr::select(., all_of(column_names)) < 0, na.rm = TRUE),
+         late_ratio = rowMeans(dplyr::select(., all_of(column_names)) > 0, na.rm = TRUE),
+         undetemined_ratio = rowMeans(dplyr::select(., all_of(column_names)) == 0, na.rm = TRUE),
+         timing_cat = case_when(early_ratio > cutoff_mut ~ "Early", 
+                                late_ratio > cutoff_mut ~ "Late", 
+                                TRUE ~ "Undetermined"),
+         aliquot_id = sample_id) %>%
+  inner_join(type_list, by = "aliquot_id") %>%
+  dplyr::select(c("sample_id", "aliquot_id", "histology_abbreviation", "Hugo_Symbol", "pathway", everything()))
+
+write.csv(data,  paste0(gritic_path, "/diff_allgene.csv"), row.names = F)
+```
+
+## Driver mutations
+### Deviation of driver mutations
+```{r}
+df_background <- fread(paste0(gritic_path, "/timing_driverbackground.csv")) %>% 
+  filter(!is.na(mean_background)) %>%
+  mutate(mean_timing = mean_background,
+         median_timing = median_background,
+         pathway = event,
+         regulator = "backgound") %>%
+  dplyr::select(c("sample_id", "Hugo_Symbol", "event", "Other_Info", everything()), -mean_background, -median_background)
+
+df_drivermutation <- fread(paste0(gritic_path, "/timing_drivermutation240806.csv")) %>%
+  dplyr::select(c("sample_id", "Hugo_Symbol", "event", "Other_Info", everything()))
+
+df_final <- rbind(df_background, df_drivermutation)
+# write.csv(df_final, file = paste0(gritic_path, "/", "pair_APC.csv"), row.names = F)
+
+## Compare the genes with background one by one
+diff_driver <- list()
+
+sample_list <- unique(df_final$sample_id)
+
+for (sample in sample_list) {
+    
+    subset <- df_final %>% filter(sample_id %in% sample) %>% dplyr::select(sample_id, Hugo_Symbol, X0:X249)
+    genes <- unique(subset$Hugo_Symbol)
+    genes <- genes[genes != "Background"]
+    
+    if(length(subset$Hugo_Symbol) > 1) {
+      
+      for (gene in genes) {
+          
+          gene1_data <- subset %>% filter(Hugo_Symbol == !!gene) %>% dplyr::select(X0:X249)
+          gene2_data <- subset %>% filter(Hugo_Symbol == "Background") %>% dplyr::select(X0:X249)
+          
+          diff_values <- gene1_data - gene2_data
+          
+          pair <- paste0(sample, "_", gene)
+          
+          print(pair)
+          
+          diff_driver[[pair]] <- cbind(sample_id = sample, event1 = gene, diff_values)
+
+      }
+    }
+  }
+  
+diff_drivermutation <- rbindlist(diff_driver, fill = TRUE) 
+write.csv(diff_drivermutation, file = paste0(gritic_path, "/timing_pair_drivermutation.csv"), row.names = F)
+
+diff_drivermutation <- fread(paste0(gritic_path, "/timing_pair_drivermutation.csv")) %>% 
+  mutate(aliquot_id = sample_id,
+         pathway = event1,
+         regulator = "Driver",
+         mean_diff = rowMeans(as.matrix(dplyr::select(., all_of(column_names)))),
+         median_diff = rowMedians(as.matrix(dplyr::select(., all_of(column_names))))) %>% 
+  left_join(., LOH_type, by = "sample_id") %>% 
+  #filter(sample_id %in% sample_MSS) %>%
+  dplyr::select(sample_id, pathway, histology_abbreviation, mean_diff, regulator)
+write_csv(diff_drivermutation, paste0(gritic_path, "/diff_drivermutation.csv"))
+```
+
+## APM timing
+```{r}
+APM_timing <- nonsyn_filter %>% filter(Hugo_Symbol %in% !!APM) %>% 
+  filter(!is.na(X0)) %>% 
+  filter(sample_id %in% sample_MSS) %>% 
+  filter(sample_id %in% sample_sucess)
+write.csv(APM_timing, paste0(gritic_path, "/Timing_APM.csv"), row.names = F)
+
+dim(APM_timing)
+table(APM_timing$timing_gritic)
+
+APM_sample <- unique(APM_timing$sample_id)
+length(APM_sample)
+
+df_APM <- APM_timing %>% filter(aliquot_id %in% APM_sample) %>%
+  filter(Hugo_Symbol %in% !!APM) %>%
+  group_by(sample_id) %>%
+  summarise(across(column_names, ~ mean(., na.rm = TRUE)), .groups = "drop")  %>%
+  mutate(event = "APM_p.A581V", 
+         Hugo_Symbol = "APM", 
+         Other_Info = NA,
+         aliquot_id = sample_id) %>%
+  dplyr::select(c("sample_id", "Hugo_Symbol", "event", "Other_Info", "aliquot_id", everything()))
+
+df_driver <- fread(paste0(gritic_path, "/timing_driverbackground.csv")) %>%
+  filter(aliquot_id %in% APM_sample) %>%
+  mutate(event = "Mean_p.A581V", 
+         Hugo_Symbol = "Mean", 
+         Other_Info = NA) %>%
+  dplyr::select(c("sample_id", "Hugo_Symbol", "event", "Other_Info", "aliquot_id", everything()), -mean_background, -median_background)
+
+final_df <- rbind(df_APM, df_driver)
+write.csv(final_df, paste0(gritic_path, "/APM_pair.csv"), row.names = F)
+
+diff_APM <- list()
+
+for (sample in APM_sample) {
+  
+  subset_APM_one <- final_df %>% filter(sample_id %in% sample) %>% dplyr::select(sample_id, Hugo_Symbol, X0:X249)
+  genes <- unique(subset_APM_one$Hugo_Symbol)
+  
+  if(length(genes) > 1) {
+    
+  for (i in 1:(length(genes) - 1)) {
+    for (j in (i + 1):length(genes)) {
+      
+      gene1_data <- subset_APM_one %>% filter(Hugo_Symbol == genes[i]) %>% dplyr::select(X0:X249)
+      gene2_data <- subset_APM_one %>% filter(Hugo_Symbol == genes[j]) %>% dplyr::select(X0:X249)
+      
+      diff_values <- gene1_data - gene2_data
+      
+      pair <- paste0(sample, "_", genes[i], "_", genes[j])
+      
+      print(pair)
+      
+      diff_APM[[pair]] <- cbind(sample_id = sample, event1 = genes[i], event2 = genes[j], diff_values)
+      
+    }
+    }
+    }
+}
+
+APM_driver <- rbindlist(diff_APM, fill = TRUE) %>% 
+  mutate(aliquot_id = sample_id,
+         mean_diff = rowMeans(as.matrix(dplyr::select(., all_of(column_names)))),
+         median_diff = rowMedians(as.matrix(dplyr::select(., all_of(column_names))))) %>% 
+  inner_join(., LOH_type, by = "sample_id") 
+write.csv(APM_driver, file = paste0(gritic_path, "/", "/timing_pair_APM.csv"), row.names = F)
+
+diff_APM <- fread(paste0(gritic_path, "//timing_pair_APM.csv")) %>% 
+  mutate(pathway = "APM",
+         regulator = "APM")
+write.csv(diff_APM, file = paste0(gritic_path, "/diff_APM.csv"), row.names = F)
+
+diff_APM_simple <- diff_APM %>%
+  dplyr::select(sample_id, pathway, histology_abbreviation, mean_diff, regulator)
+write_csv(diff_APM_simple, paste0(gritic_path, "/diff_APM_simple.csv"))
+```
+
+## Deviation of WGD timing
+```{r}
+timing_wgd <- fread(".../Project/MHC_evolution/GRITIC/output/wgd_median.csv")
+timing_driverbackground <- fread(paste0(gritic_path, "/timing_driverbackground.csv"))
+
+diff_wgd <- timing_driverbackground %>% 
+  inner_join(timing_wgd, by = "sample_id") %>% 
+  mutate(mean_diff = wgd_mediantiming -  mean_background,
+         pathway = "WGD",
+         regulator = "WGD") %>% 
+  filter(sample_id %in% sample_MSS) %>%
+  dplyr::select(-matches("\\.y$"), -Sample) %>%
+  rename_with(~ str_replace_all(., "\\.x$", "")) %>%
+  dplyr::select(sample_id, pathway, histology_abbreviation, mean_diff, regulator)
+
+write_csv(diff_wgd, paste0(gritic_path, "/diff_wgd.csv"))
+```
+
+## Deviation of pathway timing
+### Timing difference
+```{r}
+df_driver <- fread(paste0(gritic_path, "/timing_driverbackground.csv")) %>%
+             dplyr::select(c("sample_id", "Hugo_Symbol", "event", "Other_Info", everything())) %>% 
+             dplyr::select(-aliquot_id, -mean_background, -median_background)
+
+cell_types <- c("Tcells", "MHCregulators", "NKcells", "Macrophages", "GammadeltaTcells")
+regulators <- c("pos", "neg")
+
+for (cell_type in cell_types) {
+  
+   CRISPR_path <- paste0(".../Project/CRISPR/CRISPRscreen20240118/", cell_type)
+   
+   for (reg in regulators) {
+    
+     CRISPR_top10 <- read.csv(paste0(CRISPR_path, "/Summary/", cell_type, "_C5BP_", reg, "_list.csv"), header = T) %>% 
+       pull(Description)
+     
+     CRISPR_pathways <- fread(paste0(CRISPR_path, "/Summary/", cell_type, "_C5BP_", reg, "_allgenelist.csv")) %>% 
+       filter(Pathway1 %in% CRISPR_top10) %>%
+       dplyr::select(Gene, Pathway1)
+     
+     pathway_list <- unique(CRISPR_pathways$Pathway1)
+     
+     #save_path <- paste0(CRISPR_path, "/Summary/TimingSNV/timing_ttest/drivermutation/250514/")
+     
+     dir.create(save_path, recursive = TRUE)
+        
+     for (pathway in pathway_list) {
+       
+        pathway_title <- str_to_title(pathway)
+        plot_key <- paste0(cell_type, "_", reg, "_", pathway)
+        
+        CRISPR_gene <- CRISPR_pathways %>% filter(Pathway1 == !!pathway) %>% pull(Gene)
+          
+          tryCatch({
+          
+           Reg_timing <- nonsyn_filter %>% filter(Hugo_Symbol %in% CRISPR_gene) %>% filter(!is.na(X0))
+           Reg_sample <- unique(Reg_timing$sample_id)
+
+           df_Reg <- Reg_timing %>% filter(sample_id %in% Reg_sample) %>%
+             filter(Hugo_Symbol %in% !!CRISPR_gene) %>%
+             group_by(sample_id) %>%
+             summarise(across(column_names, ~ mean(., na.rm = TRUE)), .groups = "drop") %>%
+             mutate(event = "Reg_nonsyn", 
+                    Hugo_Symbol = "Reg", 
+                    Other_Info = NA) %>%
+             dplyr::select(c("sample_id", "Hugo_Symbol", "event", "Other_Info", everything()))
+ 
+           df_final <- rbind(df_Reg, df_driver)
+           
+           df_pair <- list()
+           diff_driver <- list()
+           reg_driver <- list()
+           
+           sample_list <- unique(df_final$sample_id)
+         
+           for (sample in sample_list) {
+    
+           subset <- df_final %>% filter(sample_id %in% !!sample) %>% dplyr::select(sample_id, Hugo_Symbol, X0:X249)
+           genes <- unique(subset$Hugo_Symbol)
+           # genes <- genes[genes != "Background"]
+    
+           if(length(genes) > 1) {
+            
+             for (gene in genes) {
+               
+               if(gene != "Background") {
+          
+               gene1_data <- subset %>% filter(Hugo_Symbol == !!gene) %>% dplyr::select(X0:X249)
+               gene2_data <- subset %>% filter(Hugo_Symbol == "Background") %>% dplyr::select(X0:X249)
+          
+               diff_values <- gene1_data - gene2_data
+               pair <- paste0(sample, "_", gene)
+               print(pair)
+          
+               diff_driver[[pair]] <- cbind(sample_id = sample, event1 = gene, diff_values)
+             }
+             }
+             }
+           }
+           
+           final_driver <- rbindlist(diff_driver, fill = TRUE) %>% 
+            dplyr::select(sample_id, column_names) %>% 
+            mutate(Hugo_Symbol = "Difference",
+                   event = "Difference",
+                   Other_Info = NA) %>% 
+            right_join(LOH_type,., by = "sample_id") %>%
+            mutate(mean_diff = rowMeans(as.matrix(dplyr::select(., all_of(column_names)))),
+                   median_diff = rowMedians(as.matrix(dplyr::select(., all_of(column_names))))) %>%
+            arrange(histology_abbreviation, sample_id)
+           write.csv(final_driver, file = paste0(save_path, "/difference_", cell_type, "_", reg, "_", pathway, ".csv"), row.names = F)
+           
+           rm(final_driver)
+           rm(reg_driver)
+           
+             }, error = function(e) {
+                    message("Error processing ", cell_type, "_", reg, "_", pathway, ": ", e$message)
+             })
+     }
+   }
+}
+```
+
+### Summarize results
+```{r}
+rename_list <- fread(".../Project/CRISPR/CRISPRscreen20240118/rename_list.csv") %>% 
+  mutate(pathway = str_to_title(pathway),
+         pathway = sub("/", "_", pathway))
+
+cell_types <- c("Tcells", "MHCregulators", "NKcells", "Macrophages", "GammadeltaTcells")
+data_list <- list()
+
+for (cell_type in cell_types) {
+   
+    CRISPR_path <- paste0(".../Project/CRISPR/CRISPRscreen20240118/", cell_type)
+    timing_path <- paste0(CRISPR_path, "/Summary/TimingSNV/timing_ttest/drivermutation/250514/")
+   
+    file_paths <- list.files(timing_path, pattern = "^difference_", full.names = TRUE, recursive = TRUE)
+    file_paths <- grep("\\.csv$", file_paths, value = TRUE)
+
+    for (file in file_paths) {
+       
+     file_name <- basename(file)
+     file_name <- sub("difference_", "", file_name)
+     file_name <- sub(".csv", "", file_name)
+     data_list[[file_name]] <- fread(file) %>% mutate(Study = file_name)
+    }
+ }
+
+diff_pathway <- tidy_list(data_list) %>% 
+  tidyr::separate(Study, into = c("celltype", "regulator", "pathway"), extra = "merge", fill = "right")  %>%
+  mutate(pathway = str_to_title(pathway)) %>% 
+  inner_join(rename_list,., by = "pathway") %>% 
+  mutate(pathway = pathway_new)
+write_csv(diff_pathway, paste0(gritic_path, "/diff_pathway_all.csv"))
+
+diff_pathway <- diff_pathway %>% dplyr::select(sample_id, pathway, histology_abbreviation, mean_diff, regulator, celltype)
+write_csv(diff_pathway, paste0(gritic_path, "/diff_pathway.csv"))
+```
+
+## Combine all
+```{r}
+cutoff_mut = 0.6
+cutoff_pathway = 0.5
+cutoff_ratio = 2
+
+## Pathway
+diff_pathway <- fread(paste0(gritic_path, "/diff_pathway_all.csv")) %>% 
+  filter(sample_id %in% sample_MSS) %>%
+  mutate(aliquot_id = sample_id) %>%
+  dplyr::select(all_of(column_names), pathway, histology_abbreviation, aliquot_id, mean_diff, median_diff,
+  histology_abbreviation, celltype, regulator)
+
+## APM
+diff_APM <- fread(paste0(gritic_path, "//timing_pair_APM.csv")) %>% 
+  filter(sample_id %in% sample_MSS) %>%
+  mutate(pathway = "APM", 
+         regulator = "APM",
+         celltype = "other") %>% 
+  dplyr::select(all_of(column_names), "pathway", "histology_abbreviation", "aliquot_id", "mean_diff", "median_diff", "celltype", "regulator") 
+
+## Driver Genes
+diff_drivergene <- fread(paste0(gritic_path, "/timing_pair_drivergene.csv")) %>% 
+  filter(sample_id %in% sample_MSS) %>%
+  left_join(., LOH_type, by = "sample_id") %>% 
+  mutate(aliquot_id = sample_id,
+         regulator = "Driver",
+         pathway = event1,
+         celltype = "other",
+         mean_diff = rowMeans(as.matrix(dplyr::select(., all_of(column_names)))),
+         median_diff = rowMedians(as.matrix(dplyr::select(., all_of(column_names))))) %>% 
+  dplyr::select(all_of(column_names), "pathway", "histology_abbreviation", "aliquot_id", "mean_diff", "median_diff", "celltype", "regulator") 
+
+## Combine with driver genes
+diff_all <- rbind(diff_pathway, diff_APM) %>% rbind(., diff_drivergene) %>% filter(aliquot_id %in% sample_MSS) %>% 
+       mutate(early_ratio = rowMeans(dplyr::select(., all_of(column_names)) < 0, na.rm = TRUE),
+              late_ratio = rowMeans(dplyr::select(., all_of(column_names)) > 0, na.rm = TRUE),
+              undetemined_ratio = rowMeans(dplyr::select(., all_of(column_names)) == 0, na.rm = TRUE),
+              timing_cat = case_when(early_ratio > cutoff_mut ~ "Early", 
+                                     late_ratio > cutoff_mut ~ "Late", 
+                                     TRUE ~ "Undetermined"),
+               p20 = apply(dplyr::select(., all_of(column_names)), 1, function(row) quantile(row, 0.2, na.rm = TRUE)),
+               p80 = apply(dplyr::select(., all_of(column_names)), 1, function(row) quantile(row, 0.8, na.rm = TRUE)),
+               regulator = case_when(regulator == "neg" ~ "Neg",
+                                     regulator == "pos" ~ "Pos",
+                                     regulator == "both" ~ "Both",
+                                     TRUE ~ regulator),
+              pathway = case_when(pathway == "Antigen Presentation via MHC I" & celltype == "MHCregulators" ~ paste0(pathway, " (MHC-I) "),
+                                  pathway == "Antigen Presentation via MHC I" & celltype == "Tcells" ~ paste0(pathway, " (Tcells) "),
+                                  pathway == "Antigen Presentation via MHC Ib" & celltype == "NKcells" ~ paste0(pathway, " (NKcells) "),
+                                  pathway == "IFNg Pathway" & celltype == "NKcells" ~ paste0(pathway, " (NKcells) "),
+                                  pathway == "IFNg Signaling" & celltype == "MHCregulators" ~ paste0(pathway, " (MHC-I)"),
+                                  pathway == "IFNg Signaling" & celltype == "Tcells" ~ paste0(pathway, " (Tcells)"),
+                                  pathway == "Regulation of Autophagy" & celltype == "MHCregulators" ~ paste0(pathway, " (MHC-I)"),
+                                  pathway == "Autophagy" & celltype == "Tcells" ~ paste0(pathway, " (Tcells)"),
+                                  pathway == "HSWI SNF Pathway" ~ "SWI/SNF Pathway",
+                                  pathway == "Corticosteroid Receptor Signaling Pathway" ~ "Corticosteroid Receptor Signaling",
+                                  pathway == "PD-L1-PD-1 Checkpoint Pathway In Cancer" ~ "PD-L1/PD-1 Checkpoint Pathway",
+                                  pathway == "NOD1_2 Signaling Pathway" ~ "NOD1/2 Signaling Pathway",
+              TRUE ~ pathway)) %>% filter(pathway != "WGD" & pathway != "Chromatin Disassembly")
+write_csv(diff_all, paste0(gritic_path, "/diff_alldrivergenes.csv"))
+```
+
+# All Pathway -- Propotion for all
+```{r}
+cutoff_mut = 0.6
+cutoff_pathway = 0.5
+cutoff_ratio = 2
+#path_timeline = ".../Project/CRISPR/CRISPRscreen20240118/timeline/241015/"
+path_timeline = ".../Project/MHC_evolution/GRITIC/output/250717/summary250717/timeline/"
+
+dir.create(path_timeline)
+
+diff_all <- fread(paste0(gritic_path, "/diff_alldrivergenes.csv")) %>% 
+       mutate(early_ratio = rowMeans(dplyr::select(., all_of(column_names)) < 0, na.rm = TRUE),
+              late_ratio = rowMeans(dplyr::select(., all_of(column_names)) > 0, na.rm = TRUE),
+              undetemined_ratio = rowMeans(dplyr::select(., all_of(column_names)) == 0, na.rm = TRUE),
+              timing_cat = case_when(early_ratio > cutoff_mut ~ "Early", 
+                                     late_ratio > cutoff_mut ~ "Late", 
+                                     TRUE ~ "Undetermined"),
+               p20 = apply(dplyr::select(., all_of(column_names)), 1, function(row) quantile(row, 0.2, na.rm = TRUE)),
+               p80 = apply(dplyr::select(., all_of(column_names)), 1, function(row) quantile(row, 0.8, na.rm = TRUE)),
+               regulator = case_when(regulator == "neg" ~ "Neg",
+                                     regulator == "pos" ~ "Pos",
+                                     regulator == "both" ~ "Both",
+                                     TRUE ~ regulator),
+              pathway = case_when(pathway == "Antigen Presentation via MHC-I" & celltype == "MHCregulators" ~ paste0(pathway, " (MHC-I) "),
+                                  pathway == "Antigen Presentation via MHC-I" & celltype == "Tcells" ~ paste0(pathway, " (Tcells) "),
+                                  pathway == "Antigen Presentation via MHC-Ib" & celltype == "NKcells" ~ paste0(pathway, " (NKcells) "),
+                                  pathway == "IFNg Pathway" & celltype == "NKcells" ~ paste0(pathway, " (NKcells) "),
+                                  pathway == "IFNg Signaling" & celltype == "MHCregulators" ~ paste0(pathway, " (MHC-I)"),
+                                  pathway == "IFNg Signaling" & celltype == "Tcells" ~ paste0(pathway, " (Tcells)"),
+                                  pathway == "Necroptosis" & celltype == "Tcells" ~ paste0(pathway, " (Tcells)"),
+                                  pathway == "Necroptosis" & celltype == "NKcells" ~ paste0(pathway, " (NKcells)"),
+                                  pathway == "Regulation of Autophagy" & celltype == "MHCregulators" ~ paste0(pathway, " (MHC-I)"),
+                                  pathway == "Autophagy" & celltype == "Tcells" ~ paste0(pathway, " (Tcells)"),
+                                  pathway == "HSWI SNF Pathway" ~ "SWI/SNF Pathway",
+                                  pathway == "Corticosteroid Receptor Signaling Pathway" ~ "Corticosteroid Receptor Signaling",
+                                  pathway == "PD-L1 PD-1 Checkpoint Pathway in Cancer" ~ "PD-L1/PD-1 Checkpoint Pathway",
+                                  pathway == "NOD1_2 Signaling Pathway" ~ "NOD1/2 Signaling Pathway",
+                                  pathway == "TNF Pathway" & celltype == "Tcells" ~ paste0(pathway, " (Tcells)"),
+                                  pathway == "TNF Pathway" & celltype == "NKcells" ~ paste0(pathway, " (NKcells)"),
+              TRUE ~ pathway)) %>% filter(pathway != "WGD" & pathway != "Chromatin Disassembly", pathway != "KIT Pathway") %>% filter(aliquot_id %in% sample_MSS)
+
+write_csv(diff_all, paste0(gritic_path, "/diff_all.csv"))
+saveRDS(diff_all, file = "/Users/wchen20/Desktop/Website/Shiny/EvoGIE/data/Cohorts/PCAWG/diff_all_PCAWG.rds")
+```
+
+## Plot Bar
+```{r}
+cutoff_mut = 0.6
+cutoff_pathway = 0.5
+cutoff_ratio = 2
+mode = 2
+num_filter = 4
+  
+diff_all <- fread(paste0(gritic_path, "/diff_all.csv")) %>% filter(aliquot_id %in% sample_MSS, aliquot_id %in% sample_sucess)
+
+pathway_list <- diff_all %>% distinct(pathway, regulator, .keep_all = F)
+
+types <- unique(diff_all$histology_abbreviation)
+
+for (type in types) {
+  
+  title = study = type
+  
+  # Combine and select
+  drivergene_cancer <- driver_list %>% filter(grepl(type, Tissue)) %>% pull(Gene)
+  data_driver <- diff_all %>% filter(histology_abbreviation == !!type, pathway %in% drivergene_cancer) %>% filter(!is.na(mean_diff)) 
+  data_nondriver <- diff_all %>% filter(histology_abbreviation == !!type, regulator != "Driver") %>% filter(!is.na(mean_diff)) 
+  
+  data_all <- rbind(data_driver, data_nondriver)
+  
+  data_filter1 <- data_all %>% group_by(pathway, histology_abbreviation) %>%
+    summarise(count = n()) %>%
+    ungroup() %>%
+    inner_join(., data_all, by = c("histology_abbreviation", "pathway")) %>%
+    mutate(n_base = 1,
+           percent_base = n_base/count,
+           n_late = 250 * late_ratio,
+           n_undetermined = 250 * undetemined_ratio,
+           ratio_plot = (n_late + n_undetermined/2) / 250,
+           timing_bin = cut(ratio_plot, breaks = range_breaks, include.lowest = TRUE)) %>% 
+    arrange(desc(count))
+  
+  data_filter <- data_filter1 %>% filter(timing_cat != "Undetermined") %>%
+    group_by(pathway) %>% 
+    summarise(Sum_determined = n()) %>% 
+    ungroup %>% 
+    inner_join(data_filter1, ., by = "pathway") %>%
+    filter(Sum_determined > 4)
+  
+  height = 7
+  
+  if (type == "Liver-HCC") {
+    
+    data_filter <- data_filter %>% filter(!pathway %in% c("AXIN1", "CTNNB1", "SETDB1", "APOB", "NFE2L2", "ARID2", "MACF1", "ASH1L"))
+  
+  }  else if (type %in% c("Breast-AdenoCA", "Panc-AdenoCA")) {
+      
+    data_filter <- data_filter %>% filter(!pathway %in% "Autophagy (Tcells)")
+    
+  } else {
+    
+    data_filter <- data_filter
+    
+  }
+  
+   write_csv(data_filter, paste0(path_timeline, "/filter_", type, ".csv"))
+  #data_filter <- fread(paste0(path_timeline, "/filter_", type, ".csv"))
+  
+  Freq <- as.data.frame(table(data_filter$pathway, data_filter$timing_cat))
+  
+  if (nrow(Freq) > 2 ) {
+    
+    Freq <- Freq %>% setNames(c("pathway", "time_period", "Freq")) 
+    type_sum <- as.data.frame(table(LOH_MSI$histology_abbreviation)) %>% filter(Var1 == !!type) %>% pull(Freq)
+    
+    Sum <- as.data.frame(table(data_filter$pathway)) %>% 
+      mutate(Type_sum = type_sum) %>% 
+      setNames(c("pathway", "Sum", "Sum_type")) %>% 
+      mutate(Prevelance = Sum/Sum_type) 
+    
+    data_prop <- inner_join(Freq, Sum, by = "pathway") %>% mutate(Proportion = Freq/Sum) %>% inner_join(pathway_list, by = "pathway")
+    
+    if (nrow(data_filter) > 1) {
+      
+      ratio <- data_prop %>% filter(time_period != "Undetermined") %>%
+        group_by(pathway, time_period) %>% 
+        summarise(sum_freq = sum(Freq), .groups = 'drop') %>% 
+        pivot_wider(names_from = time_period, values_from = sum_freq) %>% 
+        mutate(ratio = (Late + 1)/(Early + 1)) %>% 
+        inner_join(., data_prop, by = "pathway") %>%
+        distinct(pathway, .keep_all = TRUE) %>% 
+        mutate(pro_early = Early/Sum,
+               pro_late = Late/Sum) %>% 
+        arrange(desc(ratio)) 
+      
+       write_csv(ratio, paste0(path_timeline, "/ratio_", type, ".csv"))
+       
+       order_all <- ratio %>% arrange(desc(ratio)) %>% pull(pathway)
+      
+       prop_early <- data_prop %>% filter(time_period == "Early", Proportion >= cutoff_pathway) %>% arrange(desc(Proportion), pathway) %>% pull(pathway) %>% as.character() %>% unique()
+       prop_late <- data_prop %>% filter(time_period == "Late", Proportion >= cutoff_pathway) %>% arrange(desc(Proportion), pathway) %>% pull(pathway) %>% as.character() %>% unique()
+       prop_undetermined <- data_prop %>% filter(!pathway %in% c(prop_early, prop_late), time_period == "Early") %>% arrange(desc(Proportion), pathway) %>% pull(pathway) %>% as.character() %>% unique()
+      
+       ratio_early <- ratio %>% filter(ratio < 1/cutoff_ratio) %>% arrange(ratio) %>% pull(pathway) %>% as.character() %>% unique()
+       ratio_late <- ratio %>% filter(ratio > cutoff_ratio) %>% arrange(ratio) %>% pull(pathway) %>% as.character() %>% unique()
+       ratio_undetermined <- ratio %>% filter(!pathway %in% c(ratio_early, ratio_late)) %>% arrange(ratio, desc(pathway)) %>% pull(pathway) %>% as.character() %>% unique()
+      
+      ratio_earlydriver <- ratio %>% filter(ratio < 1/cutoff_ratio, regulator == "Driver") %>% arrange(ratio) %>% pull(pathway) %>% as.character() %>% unique()
+      ratio_latedriver <- ratio %>% filter(ratio > cutoff_ratio, regulator == "Driver") %>% arrange(ratio) %>% pull(pathway) %>% as.character() %>% unique()
+      ratio_undetermineddriver <- ratio %>% filter(!pathway %in% c(ratio_early, ratio_late), regulator == "Driver") %>% arrange(ratio, desc(pathway)) %>% pull(pathway) %>% as.character() %>% unique()
+      
+      ratio_earlypathway <- ratio %>% filter(ratio < 1/cutoff_ratio, regulator != "Driver") %>% arrange(ratio) %>% pull(pathway) %>% as.character() %>% unique()
+      ratio_latepathway <- ratio %>% filter(ratio > cutoff_ratio, regulator != "Driver") %>% arrange(ratio) %>% pull(pathway) %>% as.character() %>% unique()
+      ratio_undeterminedpathway <- ratio %>% filter(!pathway %in% c(ratio_early, ratio_late), regulator != "Driver") %>% arrange(ratio, desc(pathway)) %>% pull(pathway) %>% as.character() %>% unique()
+      
+      if (mode == 1) {
+        
+        order_early <- prop_early
+        order_late <- prop_late
+        order_undetermined <- prop_undetermined
+        
+      }
+      
+      if (mode == 2) {
+        
+        order_early <- ratio_early
+        order_late <- ratio_late
+        order_undetermined <- ratio_undetermined
+        
+        order_earlydriver <- ratio_earlydriver
+        order_latedriver <- ratio_latedriver
+        order_undetermineddriver <- ratio_undetermineddriver
+        
+        order_earlypathway <- ratio_earlypathway
+        order_latepathway <- ratio_latepathway
+        order_undeterminedpathway <- ratio_undeterminedpathway
+        
+        order_all <- ratio %>% arrange(desc(ratio)) %>% pull(pathway)
+      }
+      
+      if (mode == 3) {
+        
+        order_early <- intersect(prop_early, ratio_early)
+        order_late <- intersect(prop_late, ratio_late)
+        order_undetermined <- setdiff(order_all, union(order_early, order_late))
+        
+      }
+      
+      ## Plot for proportion
+      data_bar <- data_filter %>% filter(!is.na(late_ratio))  %>% 
+        mutate(pathway = factor(pathway, levels = order_all),
+               timing_bin = factor(timing_bin, levels = rev(timing_bin_levels)))
+      
+      plot_bar <- ggplot(data_bar, aes(x = pathway, fill = timing_bin)) +
+        geom_bar(position = "fill") +
+         theme_minimal() +
+        labs(x = "",  y = "Sample", fill = "Timing Probability", title = "") +
+        scale_fill_manual(values = color_vector, drop = FALSE) +
+        theme(axis.text.x = element_text(angle = 0, hjust = 0.5, vjust = 0.5, size = 18, colour = "black"),
+              axis.text.y = element_text(size = 16, colour = "black", hjust = 1),
+              plot.title = element_text(size = 20, vjust = 0.5),
+              axis.title.y = element_text(size = 18),
+              axis.title.x = element_text(size = 18),
+              legend.text = element_blank(),  
+              legend.title = element_text(size = 16),
+              legend.position = "none",
+              plot.margin = margin(0, 30, 5, 5), 
+              panel.grid.major = element_blank(),
+              panel.grid.minor = element_blank()) +
+        coord_flip()
+      
+      plot_bar_legend <- cowplot::plot_grid(plot_bar, legend, ncol = 2, rel_widths = c(1, 0.1))
+      ggsave(filename = paste0(path_timeline, "/Barplot_", type, ".pdf"), plot = plot_bar_legend, width = 9, height = 7.5, units = "in")
+    
+      ratio_row <- ratio %>%
+        mutate(timing_cat = case_when(
+          ratio > 2 ~ "Late",
+          ratio < 0.5 ~ "Early",
+          TRUE ~ "Undetermined"),
+          `Ratio(Log2)` = log2(ratio),
+          pathway = factor(pathway, levels = order_all))
+      
+      max <- max(abs(ratio_row$`Ratio(Log2)`))
+      
+      plot_ratio <- ggplot(ratio_row, aes(x = `Ratio(Log2)`, y = pathway, fill = timing_cat)) +
+        geom_point(size = 3, shape = 21, color = "black") +  # shape 21 allows for fill and color
+        theme_bw() +
+        theme(axis.text.y = element_blank(),
+              axis.title.y = element_blank(),
+              axis.title.x = element_text(size = 18),
+              legend.title = element_blank(), 
+              legend.text = element_text(size = 12),
+              axis.text.x = element_text(angle = 0, hjust = 0.5, vjust = 0.5, size = 18, colour = "black"),
+              plot.margin = margin(18, 30, 5, 5),
+              panel.grid.major = element_blank(),
+              panel.grid.minor = element_blank()) +
+        scale_fill_manual(values = color_bin) +  
+        xlim(-(max + 0.5), max + 0.5) + 
+        geom_vline(xintercept = 1, linetype = "dashed", color = "grey60") +  
+        geom_vline(xintercept = -1, linetype = "dashed", color = "grey60")
+
+      plot_barcom <- cowplot::plot_grid(plot_bar, 
+      legend, 
+      plot_ratio,
+      ncol = 3,  
+      rel_widths = c(1, 0.1, 0.5))
+
+      order_earlydriver <- ratio_earlydriver
+      order_latedriver <- ratio_latedriver
+      order_undetermineddriver <- ratio_undetermineddriver
+      
+      early_textdriver <- paste("Driver gene\n", paste(order_earlydriver, collapse = "\n"))
+      late_textdriver <- paste("Driver gene\n", paste(order_latedriver, collapse = "\n"))
+      variable_textdriver <- paste("Driver gene\n", paste(order_undetermineddriver, collapse = "\n"))
+
+      early_textpathway <- paste("Pathway\n", paste(order_earlypathway, collapse = "\n"))
+      late_textpathway <- paste("Pathway\n", paste(order_latepathway, collapse = "\n"))
+      variable_textpathway <- paste("Pathway\n", paste(order_undeterminedpathway, collapse = "\n"))
+
+      if (length(order_earlydriver) > 0  & length(order_earlypathway) > 0) {
+        early_text <- paste(early_textdriver, "\n", early_textpathway)
+      } else if (length(order_earlydriver) == 0 & length(order_earlypathway) > 0) { 
+        early_text <- early_textpathway
+      } else if (length(order_earlydriver) > 0 & length(order_earlypathway) == 0) { 
+        early_text <- early_textdriver
+      } else {
+        early_text <- "" 
+      }
+      
+      if (length(order_latedriver) > 0  & length(order_latepathway) > 0) {
+        late_text <- paste(late_textdriver, "\n", late_textpathway)
+      } else if (length(order_latedriver) == 0 & length(order_latepathway) > 0) { 
+        late_text <- late_textpathway
+      } else if (length(order_latedriver) > 0 & length(order_latepathway) == 0) { 
+        late_text <- late_textdriver
+      } else {
+        late_text <- "" 
+           }
+      
+      if (length(order_undetermineddriver) > 0  & length(order_undeterminedpathway) > 0) {
+        variable_text <- paste(variable_textdriver, "\n", variable_textpathway)
+      } else if (length(order_undetermineddriver) == 0 & length(order_undeterminedpathway) > 0) { 
+        variable_text <- variable_textpathway
+      } else if (length(order_undetermineddriver) > 0 & length(order_undeterminedpathway) == 0) { 
+        variable_text <- variable_textdriver
+      } else {
+        variable_text <- "" 
+           }
+      
+      text_data <- data.frame(category = c("Early", "Undetermined", "Late"),
+                              text = c(early_text, variable_text, late_text),
+                              x = c(0.165, 0.495, 0.83),
+                              y = c(0.5, 0.5, 0.5),
+                              hjust = c(0.5, 0.5, 0.5),
+                              vjust = c(0.5, 0.5, 0.5))
+      
+      title_data <- data.frame(x = c(0.165, 0.495, 0.83),
+                               y = rep(0.95, 3),
+                               label = c("Early", "Undetermined", "Late"))
+      
+      bg_data <- data.frame(
+        xmin = c(0, 0.33, 0.66),
+        xmax = c(0.33, 0.66, 1),
+        ymin = c(0, 0, 0),
+        ymax = c(1, 1, 1),
+        fill = color_summary)
+      
+      # Create the base plot with colored background sections
+      base_plot <- ggplot() +
+        geom_rect(data = bg_data, aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax, fill = fill), alpha = 0.9) +
+        scale_fill_identity() +
+        theme_void()
+      
+      for (i in 1:nrow(text_data)) {
+        base_plot <- base_plot +
+          annotate("text", x = text_data$x[i], y = text_data$y[i], label = text_data$text[i],
+                   hjust = text_data$hjust[i], vjust = text_data$vjust[i], size = 6)
+        
+      }
+      
+      for (i in 1:nrow(title_data)) {
+        base_plot <- base_plot +
+          annotate("text", x = title_data$x[i], y = title_data$y[i], label = title_data$label[i],
+                   hjust = 0.5, vjust = 1, size = 8, fontface = "bold")
+      }
+      
+      ggsave(filename = paste0(path_timeline, "/Summary_", type, ".pdf"), plot = base_plot, width = 12, height = 5, units = "in")
+      
+      plot_com2 <- plot_barcom + base_plot + patchwork::plot_layout(widths = c(3, 4)) +
+        plot_annotation(
+          title = paste0("Timeline of ", type),
+          theme = theme(plot.title = element_text(size = 24, face = "bold", hjust = 0.5)))
+      
+      ggsave(filename = paste0(path_timeline, "/Timelinebar_", type, ".pdf"), plot = plot_com2,  width = 28, height = 7, units = "in")
+      
+      rm(Freq)
+      rm(data_bar)
+      rm(plot_com1)
+      rm(plot_group)
+      rm(plot_com2)
+      rm(plot_bar)
+    }
+  }
+}
+```
+
+## CRC driver timing
+```{r}
+# "6ca5c1bb-275b-4d05-948a-3c6c7d03fab9" was not included in Toby's results
+type = "ColoRect-AdenoCA"
+figure_path <- ".../Project/MHC_evolution/GRITIC/output/250717/summary250717/timeline/"
+gritic_path = ".../Project/MHC_evolution/GRITIC/output/250717/summary250717/"
+path_timeline = ".../Project/MHC_evolution/GRITIC/output/250717/summary250717/timeline/"
+
+genelist = genelist_APC_CRC <- unique(c("APC", "FBXW7", "KRAS", "TP53", "CTNNB1", "SOX9", "SOX9", "GNAS", "TCF7L2", "SMAD4", "FAT4"))
+diff_all <- fread(paste0(gritic_path, "diff_alldrivergenes.csv")) %>% filter(aliquot_id %in% sample_MSS) %>% filter(aliquot_id %in% sample_sucess)
+
+data_all <- diff_all %>% filter(histology_abbreviation == "ColoRect-AdenoCA", regulator == "Driver", pathway %in% genelist)
+  
+data_filter1 <- data_all %>% group_by(pathway, histology_abbreviation) %>%
+    summarise(count = n()) %>%
+    ungroup() %>%
+    inner_join(., data_all, by = c("histology_abbreviation", "pathway")) %>%
+    mutate(n_base = 1,
+             percent_base = n_base/count,
+             n_late = 250 * late_ratio,
+             n_undetermined = 250 * undetemined_ratio,
+             ratio_plot = (n_late + n_undetermined/2) / 250,
+             timing_bin = cut(ratio_plot, breaks = range_breaks, include.lowest = TRUE)) %>% 
+    arrange(desc(count))
+  
+data_filter <- data_filter1 %>% filter(timing_cat != "Undetermined") %>%
+    group_by(pathway) %>% 
+    summarise(Sum_determined = n()) %>% 
+    ungroup %>% 
+    inner_join(data_filter1, ., by = "pathway") 
+  
+Freq <- as.data.frame(table(data_filter$pathway, data_filter$timing_cat))
+Freq <- Freq %>% setNames(c("pathway", "time_period", "Freq")) 
+type_sum <- as.data.frame(table(LOH_MSI$histology_abbreviation)) %>% filter(Var1 == !!type) %>% pull(Freq)
+    
+Sum <- as.data.frame(table(data_filter$pathway)) %>% 
+mutate(Type_sum = type_sum) %>% 
+setNames(c("pathway", "Sum", "Sum_type")) %>% 
+mutate(Prevelance = Sum/Sum_type) 
+    
+data_prop <- inner_join(Freq, Sum, by = "pathway") %>% mutate(Proportion = Freq/Sum)
+
+ratio <- data_prop %>% filter(time_period != "Undetermined") %>%
+        group_by(pathway, time_period) %>% 
+        summarise(sum_freq = sum(Freq), .groups = 'drop') %>% 
+        pivot_wider(names_from = time_period, values_from = sum_freq) %>% 
+        mutate(ratio = (Late + 1)/(Early + 1)) %>% 
+        inner_join(., data_prop, by = "pathway") %>%
+        distinct(pathway, .keep_all = TRUE) %>% 
+        mutate(pro_early = Early/Sum,
+               pro_late = Late/Sum) %>% 
+        arrange(desc(ratio)) 
+      
+order_all <- ratio %>% arrange(desc(ratio)) %>% pull(pathway)
+      
+data_bar <- data_filter %>%
+        mutate(pathway = factor(pathway, levels = order_all),
+               timing_bin = factor(timing_bin, levels = rev(timing_bin_levels)))
+      
+timing_propCRC <- ggplot(data_bar, aes(x = pathway, fill = timing_bin)) +
+        geom_bar(position = "fill") +
+        theme_minimal() +
+        labs(x = "",  y = "Proportion", fill = "Timing Probability", title = "") +
+        scale_fill_manual(values = color_vector, drop = FALSE) +
+        theme(axis.text.x = element_text(angle = 0, hjust = 0.5, vjust = 0.5, size = 18, colour = "black"),
+              axis.text.y = element_text(size = 16, colour = "black", hjust = 1),
+              plot.title = element_text(size = 20, vjust = 0.5),
+              axis.title.y = element_text(size = 18),
+              axis.title.x = element_text(size = 18),
+              legend.text = element_blank(),  
+              legend.title = element_text(size = 16),
+              legend.position = "none",
+              panel.grid.major = element_blank(),
+              panel.grid.minor = element_blank(),
+              plot.margin = margin(0, 30, 5, 5)) +
+        coord_flip()
+
+plot_CRC <- cowplot::plot_grid(timing_propCRC, 
+      legend, 
+      ncol = 2,  
+      rel_widths = c(1.5, 0.3))
+   
+ggsave(filename = paste0(figure_path, "/Figure2a_ColoRect-AdenoCA.pdf"), plot = plot_CRC,  width = 5, height = 6, units = "in")
+ggsave(filename = paste0(path_timeline, "/Figure2a_ColoRect-AdenoCA.pdf"), plot = plot_CRC,  width = 5, height = 6, units = "in")
+```
+
+## DLBCL APM timing
+```{r}
+type = "ColoRect-AdenoCA"
+figure_path <- ".../Project/MHC_evolution/GRITIC/output/250717/summary250717/timeline/"
+genelist = genelist_APC_CRC <- unique(c("APC", "FBXW7", "KRAS", "TP53", "CTNNB1", "SOX9", "SOX9", "GNAS", "TCF7L2", "SMAD4", "FAT4"))
+diff_all <- fread(paste0(gritic_path, "diff_alldrivergenes.csv")) %>% filter(aliquot_id %in% sample_MSS)
+data_all <- diff_all %>% filter(histology_abbreviation == "ColoRect-AdenoCA", regulator == "Driver", pathway %in% genelist)
+  
+data_filter1 <- data_all %>% group_by(pathway, histology_abbreviation) %>%
+    summarise(count = n()) %>%
+    ungroup() %>%
+    inner_join(., data_all, by = c("histology_abbreviation", "pathway")) %>%
+    mutate(n_base = 1,
+             percent_base = n_base/count,
+             n_late = 250 * late_ratio,
+             n_undetermined = 250 * undetemined_ratio,
+             ratio_plot = (n_late + n_undetermined/2) / 250,
+             timing_bin = cut(ratio_plot, breaks = range_breaks, include.lowest = TRUE)) %>% 
+    arrange(desc(count))
+  
+data_filter <- data_filter1 %>% filter(timing_cat != "Undetermined") %>%
+    group_by(pathway) %>% 
+    summarise(Sum_determined = n()) %>% 
+    ungroup %>% 
+    inner_join(data_filter1, ., by = "pathway") 
+  
+Freq <- as.data.frame(table(data_filter$pathway, data_filter$timing_cat))
+Freq <- Freq %>% setNames(c("pathway", "time_period", "Freq")) 
+type_sum <- as.data.frame(table(LOH_MSI$histology_abbreviation)) %>% filter(Var1 == !!type) %>% pull(Freq)
+    
+Sum <- as.data.frame(table(data_filter$pathway)) %>% 
+mutate(Type_sum = type_sum) %>% 
+setNames(c("pathway", "Sum", "Sum_type")) %>% 
+mutate(Prevelance = Sum/Sum_type) 
+    
+data_prop <- inner_join(Freq, Sum, by = "pathway") %>% mutate(Proportion = Freq/Sum)
+
+ratio <- data_prop %>% filter(time_period != "Undetermined") %>%
+        group_by(pathway, time_period) %>% 
+        summarise(sum_freq = sum(Freq), .groups = 'drop') %>% 
+        pivot_wider(names_from = time_period, values_from = sum_freq) %>% 
+        mutate(ratio = (Late + 1)/(Early + 1)) %>% 
+        inner_join(., data_prop, by = "pathway") %>%
+        distinct(pathway, .keep_all = TRUE) %>% 
+        mutate(pro_early = Early/Sum,
+               pro_late = Late/Sum) %>% 
+        arrange(desc(ratio)) 
+      
+order_all <- ratio %>% arrange(desc(ratio)) %>% pull(pathway)
+      
+data_bar <- data_filter %>%
+        mutate(pathway = factor(pathway, levels = order_all),
+               timing_bin = factor(timing_bin, levels = rev(timing_bin_levels)))
+      
+timing_propCRC <- ggplot(data_bar, aes(x = pathway, fill = timing_bin)) +
+        geom_bar(position = "fill") +
+        theme_minimal() +
+        labs(x = "",  y = "Proportion", fill = "Timing Probability", title = "") +
+        scale_fill_manual(values = color_vector, drop = FALSE) +
+        theme(axis.text.x = element_text(angle = 0, hjust = 0.5, vjust = 0.5, size = 18, colour = "black"),
+              axis.text.y = element_text(size = 16, colour = "black", hjust = 1),
+              plot.title = element_text(size = 20, vjust = 0.5),
+              axis.title.y = element_text(size = 18),
+              axis.title.x = element_text(size = 18),
+              legend.text = element_blank(),  
+              legend.title = element_text(size = 16),
+              legend.position = "none",
+              panel.grid.major = element_blank(),
+              panel.grid.minor = element_blank(),
+              plot.margin = margin(0, 30, 5, 5)) +
+        coord_flip()
+
+plot_CRC <- cowplot::plot_grid(timing_propCRC, 
+      legend, 
+      ncol = 2,  
+      rel_widths = c(1.5, 0.3))
+   
+ggsave(filename = paste0(figure_path, "/Figure2a_ColoRect-AdenoCA.pdf"), plot = plot_CRC,  width = 5, height = 6, units = "in")
+ggsave(filename = paste0(path_timeline, "/Figure2a_ColoRect-AdenoCA.pdf"), plot = plot_CRC,  width = 5, height = 6, units = "in")
+
+type = "Lymph-BNHL"
+figure_path <- ".../Project/MHC_evolution/GRITIC/output/250717/summary250717/timeline/"
+figure_path <- ".../Project/Figures/20250808/Figure2E/"
+APM_timing <- fread(".../Project/MHC_evolution/GRITIC/output/250717/summary250717/timing_APM.csv") %>% 
+  filter(histology_abbreviation == "Lymph-BNHL") 
+sample_APM_timingBNHL <- APM_timing %>% pull(aliquot_id) %>% unique()
+
+df_background <- fread(paste0(gritic_path, "/timing_driverbackground.csv")) %>% 
+  filter(!is.na(mean_background)) %>%
+  mutate(mean_timing = mean_background,
+         median_timing = median_background,
+         pathway = event,
+         regulator = "backgound") %>%
+  dplyr::select(c("sample_id", "Hugo_Symbol", "event", "Other_Info", everything()), -mean_background, -median_background)
+
+df_columns <- names(df_background)
+
+df_driver <- fread(paste0(gritic_path, "/timing_allmutations.csv")) %>% mutate(Hugo_Symbol = event) %>%
+  dplyr::select(c("sample_id", "Hugo_Symbol", "event", "Other_Info", everything())) %>%
+  dplyr::select(all_of(df_columns)) %>% 
+  filter(sample_id %in% sample_APM_timingBNHL) 
+
+sample_background <- unique(df_background$sample_id)
+sample_mut <- unique(df_driver$sample_id)
+sample_comm <- intersect(sample_background, sample_mut)
+
+df_final <- rbind(df_background, df_driver) %>% filter(sample_id %in% sample_comm) %>%
+  distinct()
+
+## Compare the genes with background one by one
+diff_driver <- list()
+
+sample_list <- unique(df_final$sample_id)
+
+for (sample in sample_list) {
+  
+  subset <- df_final %>% filter(sample_id %in% sample) %>% dplyr::select(sample_id, Hugo_Symbol, X0:X249)
+  genes <- unique(subset$Hugo_Symbol)
+  genes <- genes[genes != "Background"]
+  
+  if(length(genes) > 0) {
+    
+    for (gene in genes) {
+      
+      gene1_data <- subset %>% filter(Hugo_Symbol == !!gene) %>% dplyr::select(X0:X249)
+      gene2_data <- subset %>% filter(Hugo_Symbol == "Background") %>% dplyr::select(X0:X249)
+      
+      diff_values <- gene1_data - gene2_data
+      
+      pair <- paste0(sample, "_", gene)
+      
+      print(pair)
+      
+      diff_driver[[pair]] <- cbind(sample_id = sample, event1 = gene, diff_values)
+      
+    }
+  }
+}
+
+diff_drivergene <- rbindlist(diff_driver, fill = TRUE) 
+write.csv(diff_drivergene, file = paste0(gritic_path, "/timing_pair_APM_timingBNHL.csv"), row.names = F)
+
+diff_drivergene <- fread(paste0(gritic_path, "/timing_pair_APM_timingBNHL.csv")) %>% 
+  mutate(Hugo_Symbol = sub("_.*", "", event1)) %>%
+  group_by(sample_id, Hugo_Symbol) %>%
+  summarise(across(all_of(column_names), ~ mean(., na.rm = TRUE)), .groups = "drop") %>%
+  mutate(pathway = Hugo_Symbol,
+         early_ratio = rowMeans(dplyr::select(., all_of(column_names)) < 0, na.rm = TRUE),
+         late_ratio = rowMeans(dplyr::select(., all_of(column_names)) > 0, na.rm = TRUE),
+         undetemined_ratio = rowMeans(dplyr::select(., all_of(column_names)) == 0, na.rm = TRUE),
+         timing_cat = case_when(early_ratio > cutoff_mut ~ "Early", 
+                                late_ratio > cutoff_mut ~ "Late", 
+                                TRUE ~ "Undetermined"),
+         aliquot_id = sample_id,
+         histology_abbreviation = "Lymph-BNHL") %>% 
+  filter(Hugo_Symbol %in% !!APM) %>%
+  dplyr::select(c("sample_id", "aliquot_id", "histology_abbreviation", "Hugo_Symbol", "pathway", everything())) 
+write_csv(diff_drivergene, paste0(gritic_path, "/diff_allmutations_APM_timingBNHL.csv"))
+
+data_all <- fread(paste0(gritic_path, "/diff_allmutations_APM_timingBNHL.csv"))
+data_filter1 <- data_all %>% 
+  group_by(pathway, histology_abbreviation) %>%
+  summarise(count = n()) %>%
+  ungroup() %>%
+  inner_join(., data_all, by = c("histology_abbreviation", "pathway")) %>%
+  mutate(n_base = 1,
+             percent_base = n_base/count,
+             n_late = 250 * late_ratio,
+             n_undetermined = 250 * undetemined_ratio,
+             ratio_plot = (n_late + n_undetermined/2) / 250,
+             timing_bin = cut(ratio_plot, breaks = range_breaks, include.lowest = TRUE)) %>% 
+   arrange(desc(count))
+
+data_filter <- data_filter1 %>% #filter(timing_cat != "Undetermined") %>%
+  group_by(pathway) %>% 
+  summarise(Sum_determined = n()) %>% 
+  ungroup %>% 
+  inner_join(data_filter1, ., by = "pathway") 
+
+Freq <- as.data.frame(table(data_filter$pathway, data_filter$timing_cat))
+Freq <- Freq %>% setNames(c("pathway", "time_period", "Freq")) 
+type_sum <- as.data.frame(table(LOH_MSI$histology_abbreviation)) %>% filter(Var1 == !!type) %>% pull(Freq)
+
+Sum <- as.data.frame(table(data_filter$pathway)) %>% 
+  mutate(Type_sum = type_sum) %>% 
+  setNames(c("pathway", "Sum", "Sum_type")) %>% 
+  mutate(Prevelance = Sum/Sum_type) 
+
+data_prop <- inner_join(Freq, Sum, by = "pathway") %>% mutate(Proportion = Freq/Sum)
+
+ratio <- data_prop %>% filter(time_period != "Undetermined") %>%
+  group_by(pathway, time_period) %>% 
+  summarise(sum_freq = sum(Freq), .groups = 'drop') %>% 
+  pivot_wider(names_from = time_period, values_from = sum_freq) %>% 
+  mutate(ratio = (Late + 1)/(Early + 1)) %>% 
+  inner_join(., data_prop, by = "pathway") %>%
+  distinct(pathway, .keep_all = TRUE) %>% 
+  mutate(pro_early = Early/Sum,
+         pro_late = Late/Sum) %>% 
+  arrange(desc(ratio)) 
+
+order_all <- ratio %>% arrange(desc(ratio)) %>% pull(pathway)
+
+data_bar <- data_filter %>%
+  mutate(pathway = factor(pathway, levels = order_all),
+         timing_bin = factor(timing_bin, levels = rev(timing_bin_levels)))
+
+timing_propCRC <- ggplot(data_bar, aes(x = pathway, fill = timing_bin)) +
+  geom_bar(position = "fill") +
+  theme_minimal() +
+  labs(x = "",  y = "Proportion", fill = "Timing Probability", title = "") +
+  scale_fill_manual(values = color_vector, drop = FALSE) +
+  theme(axis.text.x = element_text(angle = 0, hjust = 0.5, vjust = 0.5, size = 18, colour = "black"),
+        axis.text.y = element_text(size = 16, colour = "black", hjust = 1),
+        plot.title = element_text(size = 20, vjust = 0.5),
+        axis.title.y = element_text(size = 18),
+        axis.title.x = element_text(size = 18),
+        legend.text = element_blank(),  
+        legend.title = element_text(size = 16),
+        legend.position = "none",
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        plot.margin = margin(0, 30, 5, 5)) +
+  coord_flip()
+
+plot_CRC <- cowplot::plot_grid(timing_propCRC, 
+                               legend, 
+                               ncol = 2,  
+                               rel_widths = c(1.5, 0.3))
+ggsave(filename = paste0(figure_path, "/Figure2e_APMpathway.pdf"), plot = plot_CRC,  width = 5, height = 6, units = "in")
+```
+
+# APM timing
+```{r}
+mode = 2
+diff_all <- fread(paste0(path_timeline, "/diff_all.csv"))
+
+data_all <- diff_all %>% filter(pathway == "APM") %>% 
+  filter(aliquot_id %in% sample_MSS) %>% 
+  filter(aliquot_id %in% sample_sucess)
+
+data_filter1 <- data_all %>% group_by(pathway, histology_abbreviation) %>%
+  summarise(count = n()) %>%
+  ungroup() %>%
+  inner_join(., data_all, by = c("histology_abbreviation", "pathway")) %>%
+  mutate(n_base = 1,
+             percent_base = n_base/count,
+             n_late = 250 * late_ratio,
+             n_undetermined = 250 * undetemined_ratio,
+             ratio_plot = (n_late + n_undetermined/2) / 250,
+             timing_bin = cut(ratio_plot, breaks = range_breaks, include.lowest = TRUE)) %>% 
+      arrange(desc(count))%>%
+  filter(count > 4)
+
+data_filter <- data_filter1 %>% #filter(timing_cat != "Undetermined") %>%
+  group_by(histology_abbreviation) %>% 
+  summarise(Sum_determined = n()) %>% 
+  ungroup %>% 
+  inner_join(data_filter1, ., by = "histology_abbreviation")  
+Freq <- as.data.frame(table(data_filter$histology_abbreviation, data_filter$timing_cat))
+Freq <- Freq %>% setNames(c("histology_abbreviation", "time_period", "Freq")) 
+
+ratio <- Freq %>% filter(time_period != "Undetermined") %>%
+  group_by(histology_abbreviation, time_period) %>% 
+  summarise(sum_freq = sum(Freq), .groups = 'drop') %>% 
+  pivot_wider(names_from = time_period, values_from = sum_freq) %>% 
+  mutate(ratio = (Late + 1)/(Early + 1),
+         histology_abbreviation = as.character(histology_abbreviation)) %>% 
+  arrange(desc(ratio)) 
+
+order_all <- ratio %>% arrange(desc(ratio)) %>% pull(histology_abbreviation)
+
+data_bar <- data_filter %>% 
+  #filter(!histology_abbreviation %in% c("Lung−AdenoCA", "Cervix−SCC", "Breast−LobularCA", "Kidney−ChRCC", "CNS−Oligo", "CNS−Medullo", "CNS−GBM",
+  #                                      "Thy−AdenoCA", "Prost−AdenoCA", "Panc−Endocrine", "Myeloid−MPN")) %>% 
+  mutate(histology_abbreviation = factor(histology_abbreviation, levels = order_all),
+         timing_bin = factor(timing_bin, levels = rev(timing_bin_levels))) 
+
+timing_propAPM <- ggplot(data_bar, aes(x = histology_abbreviation, fill = timing_bin)) +
+  geom_bar(position = "fill") +
+  theme_minimal() +
+  labs(x = "",  y = "Proportion", fill = "Timing Probability", title = "") +
+  scale_fill_manual(values = color_vector, drop = FALSE) +
+  theme(axis.text.x = element_text(angle = 0, hjust = 0.5, vjust = 0.5, size = 18, colour = "black"),
+        axis.text.y = element_text(size = 16, colour = "black", hjust = 1),
+        plot.title = element_text(size = 20, vjust = 0.5),
+        axis.title.y = element_text(size = 18),
+        axis.title.x = element_text(size = 18),
+        legend.text = element_blank(),  
+        legend.title = element_text(size = 16),
+        legend.position = "none",
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        plot.margin = margin(0, 30, 5, 5)) +
+  coord_flip()
+
+plot_APM <- cowplot::plot_grid(timing_propAPM, 
+      legend, 
+      ncol = 2,  
+      rel_widths = c(1.5, 0.3))
+
+ggsave(filename = paste0(path_timeline, "/Figure2c_APM.pdf"), plot = plot_APM,  width = 6, height = 6, units = "in")
+ggsave(filename = "/Users/wchen20/Desktop/Figure2c_APM.pdf", plot = plot_APM,  width = 6, height = 6, units = "in")
+```

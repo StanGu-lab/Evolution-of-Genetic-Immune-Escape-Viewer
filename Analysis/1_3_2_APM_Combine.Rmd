@@ -1,0 +1,133 @@
+---
+title: "APM_update"
+author: "AJ"
+date: "2025-07-07"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Loading Packages
+```{r}
+rm(list = ls())
+
+suppressMessages(library("ggplot2"))
+suppressMessages(library("patchwork"))
+suppressMessages(library("ggpubr"))
+suppressMessages(library("maftools"))
+suppressMessages(library("tidyr"))
+suppressMessages(library("broom"))
+suppressMessages(library("data.table"))
+suppressMessages(library("dplyr"))
+suppressMessages(library("forcats"))
+suppressMessages(library("textshape"))
+suppressMessages(library("ggrepel"))
+suppressMessages(library("tibble"))
+suppressMessages(library("readr"))
+suppressMessages(library("ggradar"))
+suppressMessages(library("ggsci"))
+suppressMessages(library("cowplot"))
+suppressMessages(library("ggdist"))
+
+PCAWG_path <- ".../Project/"
+source(paste0(PCAWG_path, "/code/source/basic.R"))
+source(paste0(PCAWG_path, "/code/source/oncoplot2.R"))
+
+LOH_MSI = LOH_mut <- fread(paste0(PCAWG_path, "/donors_and_biospecimens/LOH_MSI_final.csv"))
+LOH_type <- LOH_MSI %>% mutate(sample_id = aliquot_id) %>% dplyr::select(sample_id, histology_abbreviation)
+LOH_aliquot <- LOH_MSI %>% mutate(sample_id = aliquot_id) %>% dplyr::select(sample_id, icgc_sample_id, MSI_mut)
+LOH_MSS <- LOH_MSI %>% filter(MSI_mut == "MSS")
+sample_MSS <- LOH_MSS  %>% pull(aliquot_id)
+
+color_event <- c("Mut" = "#E64B35FF", "WT" = "#4DBBD5FF")
+color_APM_envet <- c("APM-Mutant" = "#E64B35FF", "APM-WT" = "#4DBBD5FF")
+figure_path <- ".../Project/Figures/20250813/"
+```
+
+# Combine HLA mutations and LOHHLA results
+```{r}
+path_maf <- ".../Project/consensus_snv_indel/maf/maf_from_vcf/"
+
+onco_APM_update <- fread(paste0(path_maf, "onco_APM_update.txt"))
+
+## With homo deletion
+onco_hlaloh <- fread(".../Project/consensus_snv_indel/maf/onco_hlaloh.txt")
+
+## Without
+#onco_hlaloh <- fread(".../Project/consensus_snv_indel/maf/onco_hlaloh_nohomo.txt")
+
+mat1 <- rbind(onco_APM_update, onco_hlaloh, fill = TRUE) %>%
+  mutate(across(everything(), as.character)) %>%    
+  column_to_rownames("V1") %>% dplyr::select(any_of(sample_MSS))
+
+missing_cols <- setdiff(sample_MSS, colnames(mat1))
+mat1[missing_cols] <- NA_character_
+mat1 <- mat1[, sample_MSS]
+
+mat1 <- as.matrix(mat1) 
+mat1[is.na(mat1)] <- "" 
+mat1[mat1 == "0"] <- "" 
+dim(mat1)
+
+write.table(mat1, paste0(path_maf, "onco_APM_hlaloh.txt"), sep = "\t", quote = FALSE)
+
+title = "Antigen Presentation Machinery"
+filename = paste0(figure_path, "/Figure1a.pdf")
+pdf(paste0(filename), width = 6.5, height = 2.5)
+      ht1 <-  oncoPrint(mat1,
+                        alter_fun = alter_fun,
+                        alter_fun_is_vectorized = T,
+                        pct_gp = gpar(fontsize = 7), 
+                        col = col,
+                        show_pct = T,
+                        row_names_gp = gpar(fontsize = 7), 
+                        column_title = title,
+                        top_annotation = NULL,
+                        remove_empty_columns = TRUE,
+                        heatmap_legend_param = heatmap_legend_param,
+                        pct_side = "right", 
+                        row_names_side = "left")
+draw(ht1, heatmap_legend_side = "bottom")
+dev.off()
+```
+
+# Calculate the frequencies
+```{r}
+mat1 <- fread(paste0(path_maf, "onco_APM_hlaloh.txt")) %>% 
+  column_to_rownames("V1") %>% 
+  as.matrix()
+
+# Check
+APM_mut <- as.data.frame(mat1) %>%
+  rownames_to_column("Gene") %>%
+  pivot_longer(-Gene, names_to = "aliquot_id", values_to = "Status") %>%
+  filter(Status != "")  %>% filter(Status != "HLALOH", aliquot_id %in% sample_MSS)
+length(unique(APM_mut$aliquot_id))
+table(APM_mut$Gene)
+## 188 + APM mutations in 154 patients (Some samples were marked as multi-hit)
+154/2625
+
+APM_HLALOH <- as.data.frame(mat1) %>%
+  rownames_to_column("Gene") %>%
+  pivot_longer(-Gene, names_to = "aliquot_id", values_to = "Status") %>%
+  filter(Status != "") %>% filter(Status == "HLALOH", aliquot_id %in% sample_MSS)
+length(unique(APM_HLALOH$aliquot_id))
+## 438 patients with HLA LOH
+438/2625
+
+APM_HLAmut <- as.data.frame(mat1) %>%
+  rownames_to_column("Gene") %>%
+  pivot_longer(-Gene, names_to = "aliquot_id", values_to = "Status") %>%
+  filter(Status != "") %>% filter(Gene %in% c("HLA-A", "HLA-B", "HLA-C"), aliquot_id %in% sample_MSS)
+length(unique(APM_HLAmut$aliquot_id))
+## 57 HLA mutations in 52 patients
+
+APM_nonHLAmut <- as.data.frame(mat1) %>%
+  rownames_to_column("Gene") %>%
+  pivot_longer(-Gene, names_to = "aliquot_id", values_to = "Status") %>%
+  filter(Status != "") %>% filter(!Gene %in% c("HLA-A", "HLA-B", "HLA-C", "HLALOH"), aliquot_id %in% sample_MSS)
+length(unique(APM_nonHLAmut$aliquot_id))
+## 131 non-HLA mutations in 110 samples
+```

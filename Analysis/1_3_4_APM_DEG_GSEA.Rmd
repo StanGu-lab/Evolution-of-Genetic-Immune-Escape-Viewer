@@ -1,0 +1,141 @@
+---
+title: "APM_DEG_GSEA"
+author: "AJ"
+date: "2025-08-04"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## 0. Install and load the required packages
+```{r}
+rm(list = ls())
+suppressMessages(library("tidyselect"))
+suppressMessages(library("pillar"))
+suppressMessages(library("data.table"))
+suppressMessages(library("readr"))
+suppressMessages(library("tibble"))
+suppressMessages(library("AnnotationDbi"))
+suppressMessages(library("org.Hs.eg.db"))
+suppressMessages(library("DESeq2"))
+suppressMessages(library("pheatmap"))
+suppressMessages(library("ggplot2"))
+suppressMessages(library("openxlsx"))
+suppressMessages(library("dplyr"))
+suppressMessages(library("ggpubr"))
+suppressMessages(library("patchwork"))
+suppressMessages(library("clusterProfiler"))
+suppressMessages(library("ggrepel"))
+suppressMessages(library("MAGeCKFlute"))
+suppressMessages(library("stringr"))
+suppressMessages(library("tidyr"))
+
+PCAWG_path <- ".../Project"
+source(".../Project/code/source/EnrichedView_modified.R")
+#source(".../Project/code/source/CRP_MAGEMSig0206.R")
+source(".../Project/code/source/insert_newlines.R")
+source(".../Project/code/source/TCGA_DEG0615.R")
+```
+
+## 1. Update for all histo types
+```{r}
+LOH_MSI <- fread(paste0(PCAWG_path, "/donors_and_biospecimens/LOH_MSI.csv"))
+expr_path <- paste0(PCAWG_path, "/MHC_evolution/transcriptome/Expression")
+file_list <- list.files(path = expr_path, pattern = "^exprSet_MAGE_", full.names = TRUE)
+```
+
+## 2. Combine all the gene expression
+```{r}
+expr_list <- list()
+for (file in file_list) {
+    file_name <- basename(file)
+    proj_code <- gsub("exprSet_MAGE_", "", file_name)
+    expr <- fread(file) %>% column_to_rownames(var = "V1")
+    expr_list[[proj_code]] <- expr
+}
+
+expr_all <- bind_cols(expr_list)
+write.table(expr_all, file = paste0(PCAWG_path, "/MHC_evolution/transcriptome/Expression/MAGEexpr_all.csv"), sep = ",", row.names = TRUE, quote = FALSE)
+
+sample_types <- substr(colnames(expr_all), 14, 15)
+tumor_sample_indices <- which(sample_types %in% sprintf("%02d", 1:9))
+expr_tumor <- expr_all[, tumor_sample_indices]
+write.table(expr_tumor, file = paste0(PCAWG_path, "/MHC_evolution/transcriptome/Expression/MAGEexpr_tumor.csv"), sep = ",", row.names = TRUE, quote = FALSE)
+```
+
+## 3. Differetially Expressed Genes by APM event
+```{r}
+figure_path <- ".../Project/Figures/20250707/"
+path_maf <- ".../Project/consensus_snv_indel/maf/maf_from_vcf/"
+
+mat1 <- fread(paste0(path_maf, "/onco_APM_hlaloh.txt")) %>% 
+  column_to_rownames("V1") %>% 
+  as.matrix()
+
+long_df <- as.data.frame(mat1) %>%
+  rownames_to_column("Gene") %>%
+  pivot_longer(-Gene, names_to = "aliquot_id", values_to = "Status") %>%
+  filter(Status != "") %>%         # only keep mutated entries
+  mutate(APM_Event = "APM-Mutant") %>% 
+  distinct(aliquot_id, .keep_all = T) %>% dplyr::select("aliquot_id", "APM_Event")
+
+HLALOH_pcawg <- fread(".../Project/donors_and_biospecimens/LOH_MSI_final.csv") %>% 
+  subset(MSI_mut == "MSS") %>% 
+  left_join(., long_df, by = "aliquot_id") %>% 
+  mutate(APM_Event = ifelse(!is.na(APM_Event), "APM-Mutant", "APM-WT"),
+         APM_Event = factor(APM_Event, levels = c("APM-WT", "APM-Mutant"))) 
+table(HLALOH_pcawg$APM_Event)
+
+save_path <- ".../Project/MHC_evolution/transcriptome/APM_event/250805/"
+filename <- "APM_Event"
+group <- "APM_Event"
+
+expr_tumor <- fread("/Users/wchen20/Desktop/TCGA/RNAseq/matrix/MAGEexpr_tumor.csv") %>% 
+  column_to_rownames(., "V1") %>%
+  as.matrix()
+
+TCGA_DEG(input = HLALOH_pcawg, save_path = save_path, file_name = filename, group_name = group, width_voca = 7, height_voca = 5)
+```
+
+## 8. Summarize C5_BP Gene Set
+```{r}
+DEG_path <- ".../Project/MHC_evolution/transcriptome/APM_event/250806/"
+
+regulators <- c("pos", "neg")
+
+for (reg in regulators) {
+  
+  file_paths <- list.files(DEG_path, pattern = paste0("APM_Event_PathwayC5BP", reg, "_sig"), full.names = TRUE, recursive = FALSE)
+  file_paths <- grep("\\.csv$", file_paths, value = TRUE)
+  
+  all_data <- lapply(file_paths, function(path) {
+      study <- basename(path)
+      study <- gsub("/", "_", study)
+      study <- sub("APM_event_PathwayC5BP","", study)
+      study <- sub(".csv","", study)
+
+      data <- fread(path) %>% mutate(study = study) 
+
+      return(data)
+      
+     }) %>% rbindlist(fill = TRUE)
+    
+   enrich_freq <- all_data %>%
+                    group_by(ID, Description) %>%
+                    summarise(Freq = n()) %>% 
+                    left_join(all_data, ., by = c("ID", "Description")) %>% 
+                    arrange(desc(Freq), desc(ID), desc(p.adjust))
+  
+  write.csv(enrich_freq, file =  paste0(DEG_path, "/Freq_GSEA", reg, "_all.csv"), row.names = F)
+  
+  enrich_freq_sig <- all_data %>% filter(`p.adjust` < 0.1) %>%
+                    group_by(ID, Description) %>%
+                    summarise(Freq = n()) %>% 
+                    left_join(all_data, ., by = c("ID", "Description")) %>% 
+                    arrange(desc(Freq), desc(ID), desc(p.adjust))
+    write.csv(enrich_freq_sig, file =  paste0(DEG_path, "/Freq_GSEA", reg, "_sig.csv"), row.names = F)
+    rm(all_data)
+}
+```

@@ -1,0 +1,457 @@
+---
+title: "3_2_1_CRISPR"
+author: "AJ"
+date: "2023-11-24"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+---
+title: "MAGeCKFlute"
+author: "AJ"
+date: "2023-08-27"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE)
+```
+
+# 0. Install and load the required packages
+```{r}
+rm(list = ls())
+
+suppressWarnings(library("data.table"))
+suppressWarnings(library("dplyr"))
+suppressWarnings(library("rmarkdown"))
+suppressWarnings(library("readr"))
+suppressWarnings(library("tidyr"))
+suppressWarnings(library("maftools"))
+suppressWarnings(library("stringr"))
+suppressWarnings(library("ggsci"))
+suppressWarnings(library("ggplot2"))
+suppressWarnings(library("biomaRt"))
+suppressWarnings(library("patchwork"))
+suppressWarnings(library("tibble"))
+suppressMessages(library("ggradar"))
+suppressMessages(library("broom"))
+
+PCAWG_path <- ".../Project"
+source(paste0(PCAWG_path, "/code/source/basic.R"))
+source(".../Projectcode/source/EnrichedView_modified.R")
+source(".../Projectcode/source/TCGA_DEG250410.R")
+#source(".../Projectcode/source/CRP_MAGEMSig0206.R")
+source(".../Projectcode/source/insert_newlines.R")
+source(".../Projectcode/source/GRITIC_summary.R")
+
+grid.draw.ggsurvplot <- function(x){
+  survminer:::print.ggsurvplot(x, newpage = FALSE)
+}
+
+## Path
+PCAWG_path <- "/rsrch6/scratch/hema_bio-Malignan/wchen20/PCAWG"
+PCAWG_path <- "/Users/wchen20/Desktop/PCAWG"
+gritic_path <- paste0(PCAWG_path, "/MHC_evolution/GRITIC/output")
+
+setwd(".../ProjectCRISPR")
+PCAWG_path <- "/Users/wchen20/Desktop/PCAWG"
+CRISPR_path <- ".../ProjectCRISPR"
+LOH_MSI <- fread(paste0(PCAWG_path, "/donors_and_biospecimens/LOH_MSI_final.csv")) 
+
+LOH_type <- LOH_MSI %>% mutate(sample_id = "aliquot_id") %>% dplyr::select(histology_abbreviation, aliquot_id)
+LOH_MSS <- LOH_MSI %>% mutate(sample_id = aliquot_id) %>% dplyr::select(histology_abbreviation, aliquot_id, MSI_mut) %>% filter(MSI_mut == "MSS")
+
+sample_MSS <- LOH_MSS %>% pull(aliquot_id)
+sample_tcgaMSS <- LOH_MSI %>% filter(proj == "tcga", MSI_mut == "MSS") %>% pull(aliquot_id)
+
+rename_list <- fread(".../ProjectCRISPR/CRISPRscreen20240118/rename_list.csv")
+rename_list$pathway <- str_to_title(rename_list$pathway)
+date = "250807"
+```
+
+# 3.4 Oncoprint for enrichments in whole PCAWG with Polysolver and LOHHLA results
+```{r}
+source(paste0(PCAWG_path, "/code/source/oncoplot2.R"))
+source(paste0(PCAWG_path, "/code/source/Mutation_all.R"))
+
+## Read MAF
+#load(".../Projectconsensus_snv_indel/maf/maf_pcawg_mut.RData")
+
+load(".../Projectconsensus_snv_indel/maf/pcawg_HLAupdateMSS.RData")
+
+load(".../Projectconsensus_snv_indel/maf/maf_from_vcf/pcawg_HLAupdate_nonsyn.RData")
+pcawg_MSS <- subsetMaf(maf = mymaf, 
+                     mafObj = TRUE, 
+                     tsb = sample_MSS)
+
+## Loop for cancer type
+cell_types <- c("Tcells", "MHCregulators", "NKcells", "Macrophages", "GammadeltaTcells")
+regulators <- c("neg", "pos")
+all_plots <- list()
+df <- list()
+
+for (cell_type in cell_types) {
+  
+  CRISPR_path <- paste0(".../ProjectCRISPR/CRISPRscreen20240118/", cell_type)
+  
+  for (reg in regulators) {
+    
+    CRISPR_top10 <- read.csv(paste0(CRISPR_path, "/Summary/", cell_type, "_C5BP_", reg, "_list.csv"), header = T) %>% 
+      dplyr::select(Description) %>% pull()
+    
+    CRISPR_pathways <- fread(paste0(CRISPR_path, "/Summary/", cell_type, "_C5BP_", reg, "_allgenelist.csv")) %>% 
+      filter(Pathway1 %in% CRISPR_top10) %>%
+      dplyr::select(Gene, Pathway1)
+    
+    pathway_list <- unique(CRISPR_pathways$Pathway1)
+    
+    for (pathway in pathway_list) {
+      
+      CRISPR_gene <- CRISPR_pathways %>% filter(Pathway1 == !!pathway) %>% pull(Gene)
+      CRISPR_gene <- unique(CRISPR_gene)
+      
+      mut_path <- paste0(CRISPR_path, "/Summary/MutationsFreq/", date, "/")
+      dir.create(mut_path)
+      
+      pathway = str_to_title(pathway)
+      pathway <- gsub("/", "_", pathway)
+      title <- paste0(cell_type, "_", reg, "_", pathway)
+      
+      pdf(paste0(mut_path, "oncoPlot_", title, ".pdf"), width = 10, height = 4)
+      oncoplot(pcawg_MSS,
+               genes = CRISPR_gene,
+               titleText = title,
+               writeMatrix = T,
+               removeNonMutated = F)
+      dev.off()
+      
+      old_path <- paste0("/Users/wchen20/onco_matrix_", title, ".txt")
+      new_path <- paste0(mut_path, "/onco_matrix_", title, ".txt")
+      file.rename(from = old_path, to = new_path)
+      
+      mat_pathway <- fread(new_path) %>% mutate(across(where(is.numeric), ~na_if(.x, 0))) %>% dplyr::select(V1, any_of(sample_MSS))
+
+      mat1 <- mat_pathway %>% 
+             mutate(across(everything(), as.character))
+        
+      onco_prin <- mat1 %>% 
+          column_to_rownames("V1")
+      
+      missing_cols <- setdiff(sample_MSS, colnames(onco_prin))
+      onco_prin[missing_cols] <- NA_character_
+      onco_prin <- onco_prin[, sample_MSS]
+      
+      onco_prin[is.na(onco_prin)] <- "" 
+      onco_prin[onco_prin == "0"] <- "" 
+
+      #if (any(Genes %in% c("HLA-A", "HLA-B", "HLA-C", "B2M"))) {
+   
+      #  mat1 <- mat_pathway %>% 
+      #    filter(!V1 %in% c("HLA-A", "HLA-B", "HLA-C", "B2M")) %>% 
+      #    mutate(across(everything(), as.character))
+        
+      #  onco_prin <- mat1 %>% 
+      #    column_to_rownames("V1")
+          
+      #  mat2 <- mat_HLA %>% 
+      #    filter(V1 %in% Gene_LOH) %>% 
+      #    mutate(across(everything(), as.character))
+        
+      #  key <- intersect(names(mat1), names(mat2))
+        
+        # Join the dataframes
+      #  onco_prin <- full_join(mat1, mat2, by = key) %>% 
+      #    column_to_rownames("V1")
+         
+        # Write to file
+      #  write.table(onco_prin, file = paste0(mut_path, "/onco_comNoHLA_", title, ".txt"), sep = "\t", row.names = TRUE, quote = FALSE, na = "")
+  
+      #} else {
+
+      # onco_prin <- mat_pathway %>% 
+      #    column_to_rownames("V1")
+        
+      #  write.table(onco_prin, file = paste0(mut_path, "/onco_comNoHLA_", title, ".txt"), sep = "\t", row.names = TRUE, quote = FALSE, na = "")
+      #}
+      
+      pdf(paste0(mut_path, "/oncoPrint_NoHLA", title, ".pdf"), width = 6, height = 4)
+      ht1 <-  oncoPrint(onco_prin,
+                        alter_fun = alter_fun,
+                        alter_fun_is_vectorized = T,
+                        pct_gp = gpar(fontsize = 8), 
+                        col = col,
+                        show_pct = T,
+                        row_names_gp = gpar(fontsize = 8), 
+                        column_title = title,
+                        top_annotation = NULL,
+                        remove_empty_columns = TRUE,
+                        heatmap_legend_param = heatmap_legend_param,
+                        pct_side = "right", 
+                        row_names_side = "left")
+      draw(ht1, heatmap_legend_side = "bottom")
+      dev.off()
+      
+    }
+  }
+}
+```
+
+## 3.5 Radar plot for the mutation prevelance
+```{r}
+rename_list <- fread(".../ProjectCRISPR/CRISPRscreen20240118/rename_list.csv") %>% 
+  mutate(pathway = str_to_title(pathway),
+         pathway = sub("/", "_", pathway))
+
+cell_types <- c("Tcells", "MHCregulators", "NKcells", "Macrophages", "GammadeltaTcells")
+regulators <- c("neg", "pos")
+
+for (cell_type in cell_types) {
+  
+  CRISPR_path <- paste0(".../ProjectCRISPR/CRISPRscreen20240118/", cell_type)
+  
+  mut_path <- paste0(CRISPR_path, "/Summary/MutationsFreq/", date, "/")
+  
+  file_path <- list.files(mut_path, pattern = "onco_matrix", full.names = TRUE, recursive = TRUE)
+  Freq_list <- list()
+
+  for (file in file_path) {
+  
+      filename <- basename(file)
+      filename <- sub("onco_matrix_", "", filename)
+      filename <- sub(".txt", "", filename)
+  
+      data <- fread(file) %>% 
+        column_to_rownames("V1") %>% 
+        mutate(across(where(is.numeric), ~na_if(.x, 0))) %>% t() %>% as.data.frame() %>%
+        filter(if_all(everything(), ~ !is.na(.))) %>% rownames_to_column("aliquot_id") %>% 
+        inner_join(LOH_MSS, ., by = "aliquot_id") %>% distinct(aliquot_id, .keep_all = TRUE)
+  
+      num_mut <- nrow(data)
+      num_MSS <- nrow(LOH_MSS)
+  
+      Freq <- as.data.frame(table(data$histology_abbreviation))
+      names(Freq) <- c("histology_abbreviation", "Freq_mut")
+  
+      Freq_all <-  as.data.frame(table(LOH_MSS$histology_abbreviation))
+      names(Freq_all) <- c("histology_abbreviation", "Sum")
+  
+      Freq_list[[filename]] <- left_join(Freq_all, Freq, by = "histology_abbreviation") %>% 
+        mutate(percent_mut = Freq_mut/Sum,  
+           percent_whole = num_mut/num_MSS,
+           Study = filename)
+      }
+    
+    Freq_all <- rbindlist(Freq_list) %>%
+      replace_na(list(Freq_mut = 0, percent_mut = 0)) %>% 
+      tidyr::separate(Study, into = c("cell_type", "regulator", "pathway"), extra = "merge", fill = "right") %>% 
+            left_join(., rename_list, by = "pathway") %>%
+      arrange(cell_type, regulator, desc(percent_whole), desc(percent_mut), pathway)
+    write_csv(Freq_all, paste0(mut_path, cell_type, "_Freq_oncoMSS.csv"))
+    
+    Freq_pos <- Freq_all %>%
+      filter(cell_type == !!cell_type, regulator == "pos", Freq_mut > 5) %>% 
+      mutate(histology_abbreviation = as.character(histology_abbreviation)) %>% 
+      pull(histology_abbreviation) %>% unique()
+    
+    Freq_neg <- Freq_all %>%
+      filter(cell_type == !!cell_type, regulator == "neg", Freq_mut > 5) %>% 
+      mutate(histology_abbreviation = as.character(histology_abbreviation)) %>% 
+      pull(histology_abbreviation) %>% unique()
+    
+   Type_com <- intersect(Freq_pos, Freq_neg)
+
+   for (reg in regulators) {
+     
+    Freq_sub <- Freq_all %>%
+      filter(cell_type == !!cell_type, regulator == !!reg) %>% 
+      filter(histology_abbreviation %in% !!Type_com)
+    
+    data <- Freq_sub %>%
+      mutate(pathway = pathway_new) %>%
+      dplyr::select(-cell_type, -regulator, -Sum, -Freq_mut, -pathway_new, -percent_whole)
+    
+    wide_data <- data %>%
+      spread(key = histology_abbreviation, value = percent_mut) %>% 
+      mutate(across(everything(), ~replace_na(.x, 0))) 
+    
+     if (cell_type == "MHCregulators" & reg == "pos") {
+      
+      plot_radar <- ggradar(wide_data,
+                          values.radar = c("0%", "20%", "40%"),
+                          grid.min = 0,
+                          grid.mid = 0.2,  
+                          grid.max = 0.4, 
+                          base.size = 18,
+                          grid.line.width = 0.3,
+                          grid.label.size = 8,
+                          group.line.width = 1.2,
+                          group.point.size = 3,
+                          legend.position = "bottom",
+                          background.circle.colour = "white",
+                          gridline.min.colour = "black",
+                          gridline.mid.colour = "black",
+                          gridline.max.colour = "black"
+                          ) +
+    scale_color_npg()
+    ggsave(filename = paste0(mut_path, "/Freq_radar", cell_type, reg, ".pdf"), plot = plot_radar, width = 14, height = 10, units = "in")
+      
+    }
+    
+     if (cell_type == "MHCregulators" & reg == "neg") {
+      
+      plot_radar <- ggradar(wide_data,
+                          values.radar = c("0%", "30%", "60%"),
+                          grid.min = 0,
+                          grid.mid = 0.30,  
+                          grid.max = 0.6, 
+                          base.size = 18,
+                          grid.line.width = 0.3,
+                          grid.label.size = 8,
+                          group.line.width = 1.2,
+                          group.point.size = 3,
+                          legend.position = "bottom",
+                          background.circle.colour = "white",
+                          gridline.min.colour = "black",
+                          gridline.mid.colour = "black",
+                          gridline.max.colour = "black"
+                          ) +
+    scale_color_npg()
+    ggsave(filename = paste0(mut_path, "/Freq_radar", cell_type, reg, ".pdf"), plot = plot_radar, width = 14, height = 10, units = "in")
+      
+    }
+    
+    if (cell_type == "Tcells" & reg == "pos") {
+      
+      plot_radar <- ggradar(wide_data,
+                          values.radar = c("0%", "15%", "40%"),
+                          grid.min = 0,
+                          grid.mid = 0.15,  
+                          grid.max = 0.4, 
+                          base.size = 18,
+                          grid.line.width = 0.3,
+                          grid.label.size = 8,
+                          group.line.width = 1.2,
+                          group.point.size = 3,
+                          legend.position = "bottom",
+                          background.circle.colour = "white",
+                          gridline.min.colour = "black",
+                          gridline.mid.colour = "black",
+                          gridline.max.colour = "black"
+                          ) +
+    scale_color_npg()
+    ggsave(filename = paste0(mut_path, "/Freq_radar", cell_type, reg, ".pdf"), plot = plot_radar, width = 14, height = 10, units = "in")
+      
+    }
+    
+     if (cell_type == "Tcells" & reg == "neg") {
+      
+      plot_radar <- ggradar(wide_data,
+                          values.radar = c("0%", "25%", "50%"),
+                          grid.min = 0,
+                          grid.mid = 0.25,  
+                          grid.max = 0.5, 
+                          base.size = 18,
+                          grid.line.width = 0.3,
+                          grid.label.size = 8,
+                          group.line.width = 1.2,
+                          group.point.size = 3,
+                          legend.position = "bottom",
+                          background.circle.colour = "white",
+                          gridline.min.colour = "black",
+                          gridline.mid.colour = "black",
+                          gridline.max.colour = "black"
+                          ) +
+    scale_color_npg()
+    ggsave(filename = paste0(mut_path, "/Freq_radar", cell_type, reg, ".pdf"), plot = plot_radar, width = 14, height = 10, units = "in")
+      
+    }
+    
+    if (cell_type == "NKcells") {
+      
+      plot_radar <- ggradar(wide_data,
+                          values.radar = c("0%", "15%", "30%"),
+                          grid.min = 0,
+                          grid.mid = 0.15,  
+                          grid.max = 0.30, 
+                          base.size = 18,
+                          grid.line.width = 0.3,
+                          grid.label.size = 8,
+                          group.line.width = 1.2,
+                          group.point.size = 3,
+                          legend.position = "bottom",
+                          background.circle.colour = "white",
+                          gridline.min.colour = "black",
+                          gridline.mid.colour = "black",
+                          gridline.max.colour = "black"
+                          ) +
+    scale_color_npg()
+    ggsave(filename = paste0(mut_path, "/Freq_radar", cell_type, reg, ".pdf"), plot = plot_radar, width = 14, height = 10, units = "in")
+      
+    }
+    
+    if (cell_type == "GammadeltaTcells") {
+      
+      plot_radar <- ggradar(wide_data,
+                          values.radar = c("0%", "7.5%", "15%"),
+                          grid.min = 0,
+                          grid.mid = 0.75,  
+                          grid.max = 0.15, 
+                          base.size = 18,
+                          grid.line.width = 0.3,
+                          grid.label.size = 8,
+                          group.line.width = 1.2,
+                          group.point.size = 3,
+                          legend.position = "bottom",
+                          background.circle.colour = "white",
+                          gridline.min.colour = "black",
+                          gridline.mid.colour = "black",
+                          gridline.max.colour = "black"
+                          ) +
+    scale_color_npg()
+    ggsave(filename = paste0(mut_path, "/Freq_radar", cell_type, reg, ".pdf"), plot = plot_radar, width = 14, height = 10, units = "in")
+      
+    }
+    
+     if (cell_type == "Macrophages") {
+      
+      plot_radar <- ggradar(wide_data,
+                          values.radar = c("0%", "15%", "45%"),
+                          grid.min = 0,
+                          grid.mid = 0.15,  
+                          grid.max = 0.45, 
+                          base.size = 18,
+                          grid.line.width = 0.3,
+                          grid.label.size = 8,
+                          group.line.width = 1.2,
+                          group.point.size = 3,
+                          legend.position = "bottom",
+                          background.circle.colour = "white",
+                          gridline.min.colour = "black",
+                          gridline.mid.colour = "black",
+                          gridline.max.colour = "black"
+                          ) +
+    scale_color_npg()
+    ggsave(filename = paste0(mut_path, "/Freq_radar", cell_type, reg, ".pdf"), plot = plot_radar, width = 14, height = 10, units = "in")
+      
+    }
+    
+
+   }
+}
+```
+
+# Combine all
+```{r}
+cell_types <- c("Tcells", "MHCregulators", "NKcells", "Macrophages", "GammadeltaTcells")
+regulators <- c("neg", "pos")
+
+CRISPR_path <- paste0(".../ProjectCRISPR/CRISPRscreen20240118/")
+file_path <- list.files(CRISPR_path, pattern = "_Freq_oncoMSS.csv", full.names = TRUE, recursive = TRUE)
+file_path <- grep(date, file_path, value = TRUE)
+
+Freq_all <- lapply(file_path, fread) %>% rbindlist()
+write.csv(Freq_all, file = ".../ProjectMHC_evolution/Mutations/250807/oncoMSS_PCAWG.csv", row.names = F)
+```

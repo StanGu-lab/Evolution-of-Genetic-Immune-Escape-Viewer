@@ -1,0 +1,288 @@
+---
+title: "3_2_1_CRISPR"
+author: "AJ"
+date: "2023-11-24"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+---
+title: "MAGeCKFlute"
+author: "AJ"
+date: "2023-08-27"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE)
+```
+
+# 0. Install and load the required packages
+```{r}
+rm(list = ls())
+
+suppressWarnings(library("data.table"))
+suppressWarnings(library("dplyr"))
+suppressWarnings(library("rmarkdown"))
+suppressWarnings(library("readr"))
+suppressWarnings(library("tidyr"))
+suppressWarnings(library("maftools"))
+suppressWarnings(library("stringr"))
+suppressWarnings(library("ggsci"))
+suppressWarnings(library("ggplot2"))
+suppressWarnings(library("patchwork"))
+suppressWarnings(library("tibble"))
+suppressMessages(library("ggradar"))
+suppressMessages(library("broom"))
+suppressMessages(library("survival"))
+suppressMessages(library("survminer"))
+
+PCAWG_path <- ".../Project/"
+source(paste0(PCAWG_path, "/code/source/basic.R"))
+source(".../Project/code/source/EnrichedView_modified.R")
+source(".../Project/code/source/TCGA_DEG250410.R")
+#source(".../Project/code/source/CRP_MAGEMSig0206.R")
+source(".../Project/code/source/insert_newlines.R")
+source(".../Project/code/source/GRITIC_summary.R")
+
+grid.draw.ggsurvplot <- function(x){
+  survminer:::print.ggsurvplot(x, newpage = FALSE)
+}
+
+## Path
+PCAWG_path <- "/rsrch6/scratch/hema_bio-Malignan/wchen20/PCAWG"
+PCAWG_path <- ".../Project"
+gritic_path <- paste0(PCAWG_path, "/MHC_evolution/GRITIC/output")
+
+setwd(".../Project/CRISPR")
+PCAWG_path <- ".../Project"
+CRISPR_path <- ".../Project/CRISPR"
+LOH_MSI <- fread(paste0(PCAWG_path, "/donors_and_biospecimens/LOH_MSI_final.csv")) 
+
+LOH_type <- LOH_MSI %>% mutate(sample_id = "aliquot_id") %>% dplyr::select(histology_abbreviation, aliquot_id)
+LOH_MSS <- LOH_MSI %>% mutate(sample_id = aliquot_id) %>% dplyr::select(histology_abbreviation, aliquot_id, MSI_mut) %>% filter(MSI_mut == "MSS")
+
+sample_MSS <- LOH_MSS %>% pull(aliquot_id)
+sample_tcgaMSS <- LOH_MSI %>% filter(proj == "tcga", MSI_mut == "MSS") %>% pull(aliquot_id)
+
+rename_list <- fread(".../Project/CRISPR/CRISPRscreen20240118/rename_list.csv")
+rename_list$pathway <- str_to_title(rename_list$pathway)
+date = "250807"
+```
+
+# 3.4 Oncoprint for enrichments in whole PCAWG with Polysolver and LOHHLA results
+```{r}
+source(paste0(PCAWG_path, "/code/source/oncoplot2.R"))
+source(paste0(PCAWG_path, "/code/source/Mutation_all.R"))
+
+## Read MAF
+#load(".../Project/consensus_snv_indel/maf/maf_pcawg_mut.RData")
+
+#load(".../Project/consensus_snv_indel/maf/pcawg_HLAupdateMSS.RData")
+
+#load(".../Project/consensus_snv_indel/maf/maf_from_vcf/pcawg_HLAupdate_nonsyn.RData")
+#pcawg_MSS <- subsetMaf(maf = mymaf, 
+#                     mafObj = TRUE, 
+#                     tsb = sample_MSS)
+
+## Loop for cancer type
+cell_types <- c("Tcells", "MHCregulators", "NKcells", "Macrophages", "GammadeltaTcells")
+regulators <- c("neg", "pos")
+all_plots <- list()
+df <- list()
+
+for (cell_type in cell_types) {
+  
+  CRISPR_path <- paste0(".../Project/CRISPR/CRISPRscreen20240118/", cell_type)
+  
+  for (reg in regulators) {
+    
+    CRISPR_top10 <- read.csv(paste0(CRISPR_path, "/Summary/", cell_type, "_C5BP_", reg, "_list.csv"), header = T) %>% 
+      dplyr::select(Description) %>% pull()
+    
+    CRISPR_pathways <- fread(paste0(CRISPR_path, "/Summary/", cell_type, "_C5BP_", reg, "_allgenelist.csv")) %>% 
+      filter(Pathway1 %in% CRISPR_top10) %>%
+      dplyr::select(Gene, Pathway1)
+    
+    pathway_list <- unique(CRISPR_pathways$Pathway1)
+    
+    for (pathway in pathway_list) {
+      
+      CRISPR_gene <- CRISPR_pathways %>% filter(Pathway1 == !!pathway) %>% pull(Gene)
+      CRISPR_gene <- unique(CRISPR_gene)
+      
+      mut_path <- paste0(CRISPR_path, "/Summary/MutationsFreq/", date, "/")
+      dir.create(mut_path)
+      
+      pathway = str_to_title(pathway)
+      pathway <- gsub("/", "_", pathway)
+      title <- paste0(cell_type, "_", reg, "_", pathway)
+
+      new_path <- paste0(mut_path, "/onco_matrix_", title, ".txt")
+      mat_pathway <- fread(new_path) %>% mutate(across(where(is.numeric), ~na_if(.x, 0))) %>% dplyr::select(V1, any_of(sample_MSS))
+
+      mat1 <- mat_pathway %>% 
+             mutate(across(everything(), as.character))
+        
+      onco_prin <- mat1 %>% 
+          column_to_rownames("V1")
+      
+      missing_cols <- setdiff(sample_MSS, colnames(onco_prin))
+      onco_prin[missing_cols] <- NA_character_
+      onco_prin <- onco_prin[, sample_MSS]
+      
+      onco_prin[is.na(onco_prin)] <- "" 
+      onco_prin[onco_prin == "0"] <- "" 
+
+      #if (any(Genes %in% c("HLA-A", "HLA-B", "HLA-C", "B2M"))) {
+   
+      #  mat1 <- mat_pathway %>% 
+      #    filter(!V1 %in% c("HLA-A", "HLA-B", "HLA-C", "B2M")) %>% 
+      #    mutate(across(everything(), as.character))
+        
+      #  onco_prin <- mat1 %>% 
+      #    column_to_rownames("V1")
+          
+      #  mat2 <- mat_HLA %>% 
+      #    filter(V1 %in% Gene_LOH) %>% 
+      #    mutate(across(everything(), as.character))
+        
+      #  key <- intersect(names(mat1), names(mat2))
+        
+        # Join the dataframes
+      #  onco_prin <- full_join(mat1, mat2, by = key) %>% 
+      #    column_to_rownames("V1")
+         
+        # Write to file
+      #  write.table(onco_prin, file = paste0(mut_path, "/onco_comNoHLA_", title, ".txt"), sep = "\t", row.names = TRUE, quote = FALSE, na = "")
+  
+      #} else {
+
+      # onco_prin <- mat_pathway %>% 
+      #    column_to_rownames("V1")
+        
+      #  write.table(onco_prin, file = paste0(mut_path, "/onco_comNoHLA_", title, ".txt"), sep = "\t", row.names = TRUE, quote = FALSE, na = "")
+      #}
+      
+      pdf(paste0(mut_path, "/oncoPrint_NoHLA", title, ".pdf"), width = 6, height = 4)
+      ht1 <-  oncoPrint(onco_prin,
+                        alter_fun = alter_fun,
+                        alter_fun_is_vectorized = T,
+                        pct_gp = gpar(fontsize = 8), 
+                        col = col,
+                        show_pct = T,
+                        row_names_gp = gpar(fontsize = 8), 
+                        column_title = title,
+                        top_annotation = NULL,
+                        remove_empty_columns = TRUE,
+                        heatmap_legend_param = heatmap_legend_param,
+                        pct_side = "right", 
+                        row_names_side = "left")
+      draw(ht1, heatmap_legend_side = "bottom")
+      dev.off()
+      
+    }
+  }
+}
+```
+
+## 3.5 Radar plot for the mutation prevelance
+```{r}
+path_mutsurv <- ".../Project/MHC_evolution/Mutations/250807/Survival/"
+rename_list <- fread(".../Project/CRISPR/CRISPRscreen20240118/rename_list.csv") %>% 
+  mutate(pathway = str_to_title(pathway),
+         pathway = sub("/", "_", pathway))
+
+surv <- fread("/Users/wchen20/Desktop/Website/Shiny/EvoGIE_beta/data/Cohorts/PCAWG/survival_PCAWG.csv")
+
+cell_types <- c("Tcells", "MHCregulators", "NKcells", "Macrophages", "GammadeltaTcells")
+regulators <- c("neg", "pos")
+
+for (cell_type in cell_types) {
+  
+  CRISPR_path <- paste0(".../Project/CRISPR/CRISPRscreen20240118/", cell_type)
+  
+  mut_path <- paste0(CRISPR_path, "/Summary/MutationsFreq/", date, "/")
+  
+  file_path <- list.files(mut_path, pattern = "onco_matrix", full.names = TRUE, recursive = TRUE)
+  Freq_list <- list()
+
+  for (file in file_path) {
+  
+      filename <- basename(file)
+      filename <- sub("onco_matrix_", "", filename)
+      filename <- sub(".txt", "", filename)
+  
+      data <- fread(file) %>% 
+        column_to_rownames("V1") %>% 
+        mutate(across(where(is.numeric), ~na_if(.x, 0))) %>% t() %>% as.data.frame() %>%
+        filter(if_all(everything(), ~ !is.na(.))) %>% rownames_to_column("aliquot_id") %>% 
+        mutate(Mut_group = "Mut") %>% 
+        left_join(LOH_MSS, ., by = "aliquot_id") %>% 
+        distinct(aliquot_id, .keep_all = TRUE) %>% 
+        mutate(Mut_group = ifelse(is.na(Mut_group), "WT", Mut_group)) %>% 
+        inner_join(surv, by = c("aliquot_id", "histology_abbreviation"))
+      
+      for (type in unique(data$histology_abbreviation)) {
+        
+        filtered_data <- data %>% filter(histology_abbreviation == !!type)
+        
+        # Fit survival model
+        fit <- survfit(Surv(OS_month, OS_status) ~ Mut_group, data = filtered_data)
+        max_time <- ceiling(max(filtered_data$OS_month, na.rm = TRUE) / 12) * 12
+        interval <- ceiling(max_time / 60) * 12
+        x_text <- max_time / 2
+
+        # P-values
+        res <- pairwise_survdiff(Surv(OS_month, OS_status) ~ Mut_group, data = filtered_data)
+        pvals <- round(res$p.value, 4)
+        
+        # Plot
+        surv_plot <- ggsurvplot(fit,
+                                data = filtered_data,
+                                risk.table = TRUE,
+                                pval = TRUE,
+                                conf.int = FALSE,
+                                legend.title = "",
+                                #legend.labs = legend_levels,
+                                #palette = cols_group,
+                                xlab = "Time (months)",
+                                break.x.by = interval,
+                                risk.table.y.text.col = TRUE,
+                                risk.table.y.text = FALSE)
+  
+        surv_plot$plot <- surv_plot$plot +
+            #annotate("text", x = x_text, y = 0.95, label = pval_text, hjust = 0, vjust = 1, size = 4) +
+            labs(title = "") +
+            theme(plot.title = element_text(face = "bold", size = 14, hjust = 0.5))
+  
+        mut_surv <- cowplot::plot_grid(
+            surv_plot$plot,
+            surv_plot$table,
+            align = "v",
+            ncol = 1,
+            rel_heights = c(4, 1.5)
+          )
+  
+  ggsave(paste0(path_mutsurv, "/KM_", filename, "_", type, ".pdf"), mut_surv, width = 5, height = 5)
+  
+  }
+  }
+}
+```
+
+# Combine all
+```{r}
+cell_types <- c("Tcells", "MHCregulators", "NKcells", "Macrophages", "GammadeltaTcells")
+regulators <- c("neg", "pos")
+
+CRISPR_path <- paste0(".../Project/CRISPR/CRISPRscreen20240118/")
+file_path <- list.files(CRISPR_path, pattern = "_Freq_oncoMSS.csv", full.names = TRUE, recursive = TRUE)
+file_path <- grep(date, file_path, value = TRUE)
+
+Freq_all <- lapply(file_path, fread) %>% rbindlist()
+write.csv(Freq_all, file = ".../Project/MHC_evolution/Mutations/250807/oncoMSS_PCAWG.csv", row.names = F)
+```

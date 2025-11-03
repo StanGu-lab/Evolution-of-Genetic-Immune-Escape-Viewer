@@ -1,0 +1,104 @@
+---
+title: "1_3_2_APM_HLALOH"
+author: "AJ"
+date: "2025-08-07"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Loading Packages
+```{r}
+rm(list = ls())
+
+suppressMessages(library("ggplot2"))
+suppressMessages(library("patchwork"))
+suppressMessages(library("ggpubr"))
+suppressMessages(library("maftools"))
+suppressMessages(library("survival"))
+suppressMessages(library("survminer"))
+suppressMessages(library("tidyr"))
+suppressMessages(library("broom"))
+suppressMessages(library("data.table"))
+suppressMessages(library("dplyr"))
+suppressMessages(library("forcats"))
+suppressMessages(library("textshape"))
+suppressMessages(library("ggrepel"))
+suppressMessages(library("tibble"))
+suppressMessages(library("readr"))
+suppressMessages(library("ggradar"))
+suppressMessages(library("ggsci"))
+suppressMessages(library("cowplot"))
+suppressMessages(library("ggdist"))
+
+PCAWG_path <- "../Project"
+source(paste0(PCAWG_path, "/code/source/basic.R"))
+source(paste0(PCAWG_path, "/code/source/oncoplot2.R"))
+
+LOH_MSI = LOH_mut <- fread(paste0(PCAWG_path, "/donors_and_biospecimens/LOH_MSI_final.csv"))
+LOH_type <- LOH_MSI %>% mutate(sample_id = aliquot_id) %>% dplyr::select(sample_id, histology_abbreviation)
+LOH_aliquot <- LOH_MSI %>% mutate(sample_id = aliquot_id) %>% dplyr::select(sample_id, icgc_sample_id, MSI_mut)
+LOH_MSS <- LOH_MSI %>% filter(MSI_mut == "MSS")
+sample_MSS <- LOH_MSS  %>% pull(aliquot_id)
+
+color_event <- c("Mut" = "#E64B35FF", "WT" = "#4DBBD5FF")
+color_APM_envet <- c("APM-Mutant" = "#E64B35FF", "APM-WT" = "#4DBBD5FF")
+figure_path <- "../ProjectFigures/20250813/"
+```
+
+# Set path
+```{r}
+# Successful run for TCGA: 808 patients
+# Successful run for ICGC: 1773 patients
+HLALOH_path <- "../ProjectMHC_evolution/HLALOH/results/"
+```
+
+# HLA LOH copy number
+```{r}
+hlalohall_icgc <- fread(paste0(HLALOH_path, "/LOHHLA_icgc_all.csv"))
+hlalohall_tcga <- fread(paste0(HLALOH_path, "/LOHHLA_tcga_all.csv"))
+
+df_HLALOH <- rbind(hlalohall_icgc, hlalohall_tcga)
+
+df_HLALOH <- df_HLALOH %>% subset(HLALOH == "Pos" & !is.na(Loss)) %>% 
+  mutate(CN_1 = ifelse(round(HLA_type1copyNum_withBAFBin) < 0, 0, round(HLA_type1copyNum_withBAFBin)),
+         CN_2 = ifelse(round(HLA_type2copyNum_withBAFBin) < 0, 0, round(HLA_type2copyNum_withBAFBin)),
+         major = pmax(CN_1, CN_2),
+         minor = pmin(CN_1, CN_2)) %>% 
+  dplyr::select(LOHHLA_allele1, LOHHLA_allele2, HLA_type1copyNum_withBAFBin, HLA_type2copyNum_withBAFBin, PVal_unique, sample_id, AI, Loss, HLALOH, CN_1, CN_2, major, minor) %>% 
+  distinct(sample_id, major, minor, .keep_all = TRUE)
+length(unique(df_HLALOH$sample_id))
+write.csv(df_HLALOH, paste0(HLALOH_path, "/df_HLALOH.csv"), row.names = FALSE)
+```
+
+# Summary
+```{r}
+df_HLALOH <- fread(paste0(HLALOH_path, "/df_HLALOH.csv"))
+
+## Homo Deletion
+df_HLALOH_homo <- df_HLALOH %>% filter(major == 0)
+length(unique(df_HLALOH_homo$sample_id))
+
+## With Homo
+onco_hlaloh <- df_HLALOH %>% filter(sample_id %in% sample_MSS) %>% 
+  dplyr::select(sample_id, HLALOH) %>% distinct() %>% 
+  mutate(value = "HLALOH") %>%
+  pivot_wider(names_from = sample_id, values_from = value, values_fill = "") %>% 
+  mutate(V1 = "HLALOH") %>% 
+  dplyr::select(-"HLALOH") %>% column_to_rownames("V1")
+dim(onco_hlaloh)
+write.table(onco_hlaloh, "../Projectconsensus_snv_indel/maf/onco_hlaloh.txt", sep = "\t", quote = FALSE)
+
+## Without Homo
+onco_hlaloh_nohomo <- df_HLALOH %>%  filter(major > 0) %>% filter(sample_id %in% sample_MSS) %>% 
+  dplyr::select(sample_id, HLALOH) %>% distinct() %>% 
+  mutate(value = "HLALOH") %>%
+  pivot_wider(names_from = sample_id, values_from = value, values_fill = "") %>% 
+  mutate(V1 = "HLALOH") %>% 
+  dplyr::select(-"HLALOH") %>% column_to_rownames("V1")
+
+dim(onco_hlaloh_nohomo)
+write.table(onco_hlaloh_nohomo, "../Projectconsensus_snv_indel/maf/onco_hlaloh_nohomo.txt", sep = "\t", quote = FALSE)
+```

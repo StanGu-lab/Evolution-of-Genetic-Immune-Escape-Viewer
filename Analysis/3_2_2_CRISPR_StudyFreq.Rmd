@@ -1,0 +1,393 @@
+---
+title: "3_2_1_CRISPR"
+author: "AJ"
+date: "2023-11-24"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+---
+title: "MAGeCKFlute"
+author: "AJ"
+date: "2023-08-27"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE)
+```
+
+# 0. Install and load the required packages
+```{r}
+rm(list = ls())
+
+suppressWarnings(library("data.table"))
+suppressWarnings(library("dplyr"))
+suppressWarnings(library("rmarkdown"))
+suppressWarnings(library("readr"))
+suppressWarnings(library("tidyr"))
+suppressWarnings(library("maftools"))
+suppressWarnings(library("stringr"))
+suppressWarnings(library("ggsci"))
+suppressWarnings(library("ggplot2"))
+suppressWarnings(library("biomaRt"))
+suppressWarnings(library("patchwork"))
+suppressWarnings(library("tibble"))
+suppressMessages(library("ggradar"))
+suppressMessages(library("broom"))
+
+PCAWG_path <- "/.../Project/"
+source(paste0(PCAWG_path, "/code/source/basic.R"))
+source("/.../Project/code/source/EnrichedView_modified.R")
+source("/.../Project/code/source/TCGA_DEG250410.R")
+#source("/.../Project/code/source/CRP_MAGEMSig0206.R")
+source("/.../Project/code/source/insert_newlines.R")
+source("/.../Project/code/source/GRITIC_summary.R")
+
+grid.draw.ggsurvplot <- function(x){
+  survminer:::print.ggsurvplot(x, newpage = FALSE)
+}
+
+## Path
+PCAWG_path <- "/rsrch6/scratch/hema_bio-Malignan/wchen20/PCAWG"
+PCAWG_path <- "/.../Project"
+gritic_path <- paste0(PCAWG_path, "/MHC_evolution/GRITIC/output")
+
+setwd("/.../Project/CRISPR")
+PCAWG_path <- "/.../Project"
+CRISPR_path <- "/.../Project/CRISPR"
+LOH_MSI <- fread(paste0(PCAWG_path, "/donors_and_biospecimens/LOH_MSI_final.csv")) 
+
+LOH_type <- LOH_MSI %>% mutate(sample_id = "aliquot_id") %>% dplyr::select(histology_abbreviation, aliquot_id)
+LOH_MSS <- LOH_MSI %>% mutate(sample_id = aliquot_id) %>% dplyr::select(histology_abbreviation, aliquot_id, MSI_mut) %>% filter(MSI_mut == "MSS")
+
+sample_MSS <- LOH_MSS %>% pull(aliquot_id)
+sample_tcgaMSS <- LOH_MSI %>% filter(proj == "tcga", MSI_mut == "MSS") %>% pull(aliquot_id)
+
+rename_list <- fread("/.../Project/CRISPR/CRISPRscreen20240118/rename_list.csv")
+rename_list$pathway <- str_to_title(rename_list$pathway)
+```
+
+# 1. Summary for CRIPSR studies
+```{r, eval = FALSE}
+cell_types <- c("Tcells", "MHCregulators", "NKcells", "Macrophages", "GammadeltaTcells")
+#cell_types <- c("PDL1regulators", "CART", "NKcells")
+regulators <- c("pos", "neg")
+
+for (cell_type in cell_types) {
+   
+   CRISPR_path <- paste0("/.../Project/CRISPR/CRISPRscreen20240118/", cell_type)
+   
+   ## 1. Combine all the pathways for each 
+   for (reg in regulators) {
+    
+    file_paths <- list.files(CRISPR_path, pattern = paste0("_PathwayGOBP_", reg, "100.csv"), full.names = TRUE, recursive = TRUE)
+    study_total <- length(unique(file_paths))
+    
+    all_data <- lapply(file_paths, function(path) {
+      study <- strsplit(path, "/")[[1]]
+      study <- paste(study[-(1:7)], collapse="/")
+      study <- gsub("/", "_", study)
+      study <- sub("3_GSEA_", "", study)
+      study <- sub("_PathwayGOBP_", "", study)
+      study <- sub("\\.csv$", "", study)
+
+      data <- fread(path) %>% mutate(BG = sub("/.*", "", BgRatio),
+                                     Study = study)
+      return(data)
+      
+     }) %>% rbindlist(fill = TRUE)
+     
+    ## 2. Calculate the frequency of each pathway
+    enrich_freq <- all_data %>%
+                    group_by(ID) %>%
+                    dplyr::summarise(Freq = n()) %>% 
+                    left_join(all_data, ., by = "ID") %>% mutate(total_study = study_total)
+  
+     write.csv(enrich_freq, file =  paste0(CRISPR_path, "/Summary/", cell_type, "_C5BP_", reg, ".csv"), row.names = F)
+     
+     ## 3. Obtain the common genes or all genes
+     combined <- all_data %>%
+     group_by(ID) %>%
+     dplyr::summarize(combined_proteins = paste(unique(geneName), collapse = "/")) %>%
+     mutate(combined_proteins = sapply(strsplit(combined_proteins, "/"), function(x) paste(unique(x), collapse = ",")))
+
+     overlapped <- all_data %>%
+     group_by(ID) %>%
+     dplyr::summarise(common_proteins_list = list(Reduce(intersect, strsplit(geneName, split="/"))), .groups = "drop") %>%
+     mutate(common_proteins = sapply(common_proteins_list, paste, collapse = ",")) %>% 
+     dplyr::select(-common_proteins_list)
+     
+     id_com <- enrich_freq %>% distinct(ID,.keep_all = T) %>% 
+       dplyr::select(ID,	Description, Study, Freq, BG) %>% 
+       left_join(., combined, by = "ID") %>% 
+       left_join(., overlapped, by = "ID") %>% 
+       dplyr::select(ID, Description, BG, combined_proteins, common_proteins, Freq)
+     write.csv(id_com, file =  paste0(CRISPR_path, "/Summary/", cell_type, "_C5BP_", reg, "_combined.csv"), row.names = F)
+      
+     id_poss_long <- id_com %>%
+                arrange(desc(Freq), ID) %>%
+                subset(Freq > 1) %>%
+                head(10) %>%
+                separate_rows(combined_proteins, sep = ",") %>%
+                left_join(., id_com, by = "ID") %>%
+                dplyr::rename(Pathway = ID, Pathway1 = `Description.x`, Gene = `combined_proteins.x`, Freq = `Freq.x`) %>%
+                dplyr::select(Pathway, Pathway1, Gene, Freq)
+      write.csv(id_poss_long, file = paste0(CRISPR_path, "/Summary/", cell_type, "_C5BP_", reg, "genelist.csv"), row.names = F)
+      
+      id_poss_all <- id_com %>% 
+                arrange(desc(Freq), ID) %>%
+                separate_rows(combined_proteins, sep = ",") %>%
+                left_join(., id_com, by = "ID") %>%
+                dplyr::rename(Pathway = ID, Pathway1 = `Description.x`, Gene = `combined_proteins.x`, Freq = `Freq.x`) %>%
+                dplyr::select(Pathway, Pathway1, Gene, Freq)
+      write.csv(id_poss_all, file = paste0(CRISPR_path, "/Summary/", cell_type, "_C5BP_", reg, "_allgenelist.csv"), row.names = F)
+      
+      ## Generate the top gene matrix
+      file_paths <- list.files(CRISPR_path, pattern = "*100.csv", full.names = TRUE, recursive = TRUE)
+      file_paths <- file_paths[grepl(reg, file_paths)]
+      file_paths <- file_paths[grepl("3_GSEA", file_paths)]
+      file_paths <- file_paths[!grepl("PathwayGOBP", file_paths)]
+      
+      gene_list <- list()
+      
+      for (file in file_paths) {
+      
+      study <- sub(paste0(".*/", cell_type, "/"), "", file)
+      study <- sub("/3_GSEA/", "_", study)
+      study <- sub("/", "_", file)
+      
+      data <- fread(file)
+      gene_list[[study]] <- data %>% dplyr::select(HumanGene)
+      
+      }
+    
+    gene_all <- rbindlist(gene_list) %>% distinct(HumanGene)
+    
+    gene_df <- list()
+    
+    for (file in file_paths) {
+      
+      study <-  sub(paste0(".*/", cell_type, "/"), "", file)
+      study <- sub("/3_GSEA/", "_", study)
+      study <- sub("_pos100.csv", "", study)
+      study <- sub("_neg100.csv", "", study)
+      
+      data <- fread(file)
+      data[, (study) := 1]
+      gene_df[[study]] <- data %>% dplyr::select(HumanGene, study) 
+      gene_all <- left_join(gene_all, gene_df[[study]], by = "HumanGene")
+      
+    }
+    
+    gene_all <- gene_all %>%
+      mutate(across(2:ncol(.), ~replace_na(.x, 0))) %>%
+      mutate(Total = rowSums(dplyr::select(., 2:ncol(.)))) %>% arrange(desc(Total))
+    
+    write.csv(gene_all, paste0(CRISPR_path, "/Summary/", cell_type,  "_", reg, "GeneMatrix.csv"), row.names = FALSE)
+      
+    }
+}
+```
+
+## 1.2 Generate all the genes in pathways
+```{r}
+save_path <- "/.../Project/CRISPR/CRISPRscreen20240118/"
+cell_types <- c("Tcells", "MHCregulators", "NKcells", "Macrophages", "GammadeltaTcells")
+regulators <- c("pos", "neg")
+
+all_genelists <- list()
+
+for (cell_type in cell_types) {
+  
+  CRISPR_path <- paste0("/.../Project/CRISPR/CRISPRscreen20240118/", cell_type)
+  
+  for (reg in regulators) {
+    
+    CRISPR_top10 <- read.csv(
+      paste0(CRISPR_path, "/Summary/", cell_type, "_C5BP_", reg, "_list.csv"),
+      header = TRUE
+    ) %>% pull(Description)
+    
+    CRISPR_pathways <- fread(
+      paste0(CRISPR_path, "/Summary/", cell_type, "_C5BP_", reg, "_allgenelist.csv")
+    ) %>%
+      filter(Pathway1 %in% CRISPR_top10) %>%
+      dplyr::select(Gene, Pathway1)
+    
+    pathway_list <- unique(CRISPR_pathways$Pathway1)
+    
+    for (pathway in pathway_list) {
+      
+      CRISPR_gene <- CRISPR_pathways %>%
+        filter(Pathway1 == !!pathway) %>%
+        pull(Gene)
+      
+      gene_list <- paste(CRISPR_gene, collapse = ", ")
+      
+      df_genelist <- data.frame(
+        "Cell_Type" = cell_type,
+        "Regulator" = reg,
+        "Pathway" = pathway,
+        "Gene_List" = gene_list
+      )
+      
+      # Append to list
+      all_genelists[[length(all_genelists) + 1]] <- df_genelist
+    }
+  }
+}
+
+# Combine all into one data frame
+final_genelist_df <- do.call(rbind, all_genelists)
+
+# Save to a single CSV
+write.csv(final_genelist_df, file = paste0(save_path, "/df_genelist.csv"), row.names = FALSE)
+```
+
+## 1.3 Perform enrichment analysis for gene matrix
+```{r}
+cell_types <- c("Tcells", "MHCregulators", "NKcells", "Macrophages", "GammadeltaTcells")
+regulators <- c("pos", "neg")
+
+width_enri = 8
+height_enri = 9
+
+for (cell_type in cell_types) {
+  
+  CRISPR_path <- paste0("/.../Project/CRISPR/CRISPRscreen20240118/", cell_type, "/")
+  
+  for (reg in regulators) {
+    
+    data <- fread(paste0(CRISPR_path, "/Summary/", cell_type, "_", reg, "GeneMatrix.csv"))
+    
+    if (reg == "neg") {
+      res_sig <- data %>% mutate(Total=-Total) %>% filter(Total < -1)
+      
+    } else {
+      res_sig <- data %>% filter(Total > 1)
+    }
+    
+    genelist = res_sig$Total
+    names(genelist) = res_sig$HumanGene
+    genelist = sort(genelist, decreasing = TRUE)
+
+    enrich = EnrichAnalyzer(geneList = genelist, 
+                        method = "ORT", 
+                        type = "Pathway+C5_BP",
+                        limit = c(5, 500),
+                        pvalueCutoff = 1,
+                        organism = "hsa")
+    en <- enrich@result %>% mutate(GeneRatio = paste0("'", GeneRatio)) 
+    write.csv(en, file = paste0(CRISPR_path, "/", cell_type, "_MaxtrixPathway_", reg, ".csv"), row.names = F, quote = TRUE)
+    
+    en_sig <- en %>% filter(`p.adjust` < 0.1) %>% mutate(GeneRatio = paste0("'", GeneRatio)) 
+    write.csv(en, file = paste0(CRISPR_path, "/", cell_type, "_MaxtrixPathway_", reg, "_sig.csv"), row.names = F, quote = TRUE)
+    
+    top10 <- EnrichedView_modified(en_sig, top = 10, mode = 1, title = paste0(cell_type,"_", reg))
+    ggsave(file = paste0(CRISPR_path, "/", cell_type, "_MaxtrixPathway_", reg,".pdf"), top10, width = width_enri, height = height_enri, dpi = 300)
+    
+  }
+  }
+```
+
+# 2. Dot Plot for frequenceis of enrichments reported by CRISPR studies
+```{r}
+rename_list <- fread("/.../Project/CRISPR/CRISPRscreen20240118/rename_list.csv")
+rename_list$pathway <- str_to_title(rename_list$pathway)
+
+cell_types <- c("Tcells", "MHCregulators", "NKcells", "Macrophages", "GammadeltaTcells")
+#cell_types <- c("PDL1regulators", "CART", "NKcells")
+regulators <- c("pos", "neg")
+freqdot_plot <- list()
+
+for (cell_type in cell_types) {
+  
+  for (reg in regulators) {
+  
+  CRISPR_path <- paste0("/.../Project/CRISPR/CRISPRscreen20240118/", cell_type)
+  
+  CRISPR_pathways <- read.csv(paste0(CRISPR_path, "/Summary/", cell_type, "_C5BP_", reg, "_list.csv"), header = T) 
+  
+  CRISPR_all <- fread(paste0(CRISPR_path, "/Summary/", cell_type, "_C5BP_", reg, ".csv")) %>% 
+    inner_join(., CRISPR_pathways, by = c("ID", "Description")) %>%
+    mutate(logp = -log10(`p.adjust`))
+
+  CRISPR_all$Description <- str_to_title(CRISPR_all$Description)
+  CRISPR_all <- CRISPR_all %>% mutate(pathway = Description) %>% inner_join(rename_list, by = "pathway")
+  CRISPR_all$pathway_new <- sapply(CRISPR_all$pathway_new, insert_newlines_every_five_words2)
+  
+  CRISPR_order <- CRISPR_all %>% distinct(pathway_new, .keep_all = TRUE) %>% arrange(Freq) %>% dplyr::select(pathway_new) %>% pull()
+  CRISPR_all <- CRISPR_all %>% mutate(pathway_new = factor(pathway_new, level = CRISPR_order))
+  
+  study_number <- unique(CRISPR_all$total_study)
+  print(paste0(cell_type, "_", reg, "_study_number:", study_number))
+  
+  plot_key <- paste0(cell_type, "_", reg, sep = "")
+  ploy_title <- paste0(plot_key, "\n (n = ", study_number, ")")
+  
+  freqdot_plot[[plot_key]] <- ggplot(CRISPR_all, aes(x = pathway_new, y = logp, fill = Count)) +
+  geom_point(shape = 21, stroke = 0.5, size = 3) +
+  coord_flip() +
+  scale_size_continuous(range = c(0, 6)) + 
+  scale_fill_gradient(low = "#66AAD4", high = "#08306B") +
+  labs(x = "", y = "-Log(p.adj)", title = "") +
+  guides(color = guide_colorbar(title = "Count")) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(hjust = 0.5, vjust = 0.5, size = 12, color = "black"),
+        axis.text.y = element_text(hjust = 1, vjust = 0.5, size = 12, color = "black"),
+        legend.position = "right",
+        legend.key.size = unit(0.5, "cm"), 
+        legend.text = element_text(size = 6), 
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.background = element_blank(),
+        axis.line = element_line(color = "black"),
+        axis.ticks = element_line(color = "black")) +
+  #scale_y_continuous(breaks = c(0, 5, 10, 15)) +
+  geom_text(aes(label = Freq, y = max(logp) + 1), hjust = 0.5, size = 4) +
+  ggtitle(ploy_title) + theme(plot.title = element_text(size = 18, face = "bold", hjust = 0.5))
+  
+  ggsave(filename = paste0(CRISPR_path, "/Summary/", cell_type, "_BP_", reg, "_freqdot.pdf"), plot = freqdot_plot[[plot_key]], width = 6, height = 6.5, units = "in")
+  }
+  
+  freqdot_plot[[cell_type]] <- freqdot_plot[[paste0(cell_type, "_", "pos")]] + freqdot_plot[[paste0(cell_type, "_", "neg")]]
+  ggsave(filename = paste0(CRISPR_path, "/Summary/", cell_type, "_BP_freqdot.pdf"), plot = freqdot_plot[[cell_type]], width = 10, height = 6, units = "in")
+
+}
+
+cell_type = "MHCregulators"
+ggsave(filename = "/.../Project/Figures/Figure4b.pdf", plot = freqdot_plot[[cell_type]], width = 10, height = 5, units = "in")
+
+cell_type = "Tcells"
+ggsave(filename = "/.../Project/Figures/Figure4c.pdf", plot = freqdot_plot[[cell_type]], width = 10, height = 5, units = "in")
+
+cell_type = "NKcells"
+#ggsave(filename = "/.../Project/Figures/Figure4d.pdf", plot = freqdot_plot[[cell_type]], width = 10, height = 5, units = "in")
+CRISPR_path <- paste0("/.../Project/CRISPR/CRISPRscreen20240118/", cell_type)
+freqdot_plot[[cell_type]] <- freqdot_plot[[paste0(cell_type, "_", "pos")]] + freqdot_plot[[paste0(cell_type, "_", "neg")]]
+ggsave(filename = paste0(CRISPR_path, "/Summary/", cell_type, "_BP_freqdot.pdf"), plot = freqdot_plot[[cell_type]], width = 10, height = 5, units = "in")
+
+cell_type = "Macrophages"
+CRISPR_path <- paste0("/.../Project/CRISPR/CRISPRscreen20240118/", cell_type)
+freqdot_plot[[cell_type]] <- freqdot_plot[[paste0(cell_type, "_", "pos")]] / freqdot_plot[[paste0(cell_type, "_", "neg")]]
+ggsave(filename = paste0(CRISPR_path, "/Summary/", cell_type, "_BP_freqdot.pdf"), plot = freqdot_plot[[cell_type]], width = 6, height = 6.5, units = "in")
+
+cell_type = "GammadeltaTcells"
+CRISPR_path <- paste0("/.../Project/CRISPR/CRISPRscreen20240118/", cell_type)
+freqdot_plot[[cell_type]] <- freqdot_plot[[paste0(cell_type, "_", "pos")]] / freqdot_plot[[paste0(cell_type, "_", "neg")]]
+ggsave(filename = paste0(CRISPR_path, "/Summary/", cell_type, "_BP_freqdot.pdf"), plot = freqdot_plot[[cell_type]], width = 6, height = 6.5, units = "in")
+
+cell_type = "PDL1regulators"
+CRISPR_path <- paste0("/.../Project/CRISPR/CRISPRscreen20240118/", cell_type)
+freqdot_plot[[cell_type]] <- freqdot_plot[[paste0(cell_type, "_", "pos")]] + freqdot_plot[[paste0(cell_type, "_", "neg")]]
+ggsave(filename = paste0(CRISPR_path, "/Summary/", cell_type, "_BP_freqdot.pdf"), plot = freqdot_plot[[cell_type]], width = 10, height = 5, units = "in")
+
+cell_type = "CART"
+CRISPR_path <- paste0("/.../Project/CRISPR/CRISPRscreen20240118/", cell_type)
+freqdot_plot[[cell_type]] <- freqdot_plot[[paste0(cell_type, "_", "pos")]] + freqdot_plot[[paste0(cell_type, "_", "neg")]]
+ggsave(filename = paste0(CRISPR_path, "/Summary/", cell_type, "_BP_freqdot.pdf"), plot = freqdot_plot[[cell_type]], width = 10, height = 5, units = "in")
+```

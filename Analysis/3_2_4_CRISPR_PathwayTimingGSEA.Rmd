@@ -1,0 +1,254 @@
+---
+title: "3_2_1_CRISPR"
+author: "AJ"
+date: "2023-11-24"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+---
+title: "MAGeCKFlute"
+author: "AJ"
+date: "2023-08-27"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE)
+```
+
+# 1. Load Packages
+```{r}
+rm(list = ls())
+
+library("data.table")
+library("dplyr")
+library("readr")
+library("tidyr")
+library("stringr")
+library("ggplot2")
+
+source(".../Project/code/source/basic.R")
+source(".../Project/code/source/TCGA_DEG0615.R")
+source(".../Project/code/source/EnrichedView_modified.R")
+
+PCAWG_path <- "/rsrch6/scratch/hema_bio-Malignan/wchen20/PCAWG"
+PCAWG_path <- ".../Project"
+figure_path <- ".../Project/Figures/20240827/"
+
+LOH_MSI = LOH_mut <- fread(paste0(PCAWG_path, "/donors_and_biospecimens/LOH_MSI_final.csv"))
+LOH_type <- LOH_MSI %>% mutate(sample_id = aliquot_id) %>% dplyr::select(sample_id, histology_abbreviation)
+LOH_aliquot <- LOH_MSI %>% mutate(sample_id = aliquot_id) %>% dplyr::select(sample_id, icgc_sample_id, MSI_mut)
+LOH_MSS <- LOH_MSI %>% filter(MSI_mut == "MSS")
+LOH_MSSinput <- LOH_MSI %>% mutate(sample_id = aliquot_id) 
+sample_MSS <- LOH_MSS  %>% pull(aliquot_id)
+
+sample_MSS <- LOH_MSS %>% pull(aliquot_id)
+sample_tcgaMSS <- LOH_MSI %>% filter(proj == "tcga", MSI_mut == "MSS") %>% pull(aliquot_id)
+
+rename_list <- fread(".../Project/CRISPR/CRISPRscreen20240118/rename_list.csv")
+rename_list$pathway <- str_to_title(rename_list$pathway)
+
+path_trans <- ".../Project/MHC_evolution/transcriptome/"
+gritic_path <- paste0(".../Project/MHC_evolution/GRITIC/output/250717/summary250717/")
+cutoff_mut = 0.5
+cutoff_pathway = 0.5
+path_timeline = paste0(gritic_path, "timeline/")
+today_date <- "20250808"
+path_GSEA <- paste0(path_trans, "/Pathway_timing/", today_date, "/")
+```
+
+# 3. Compare pathway timing
+## Load data
+```{r}
+diff_all_GSEA <- fread(paste0(gritic_path, "/diff_all.csv")) %>% 
+            mutate(sample_id = aliquot_id,
+              early_ratio = rowMeans(dplyr::select(., all_of(column_names)) < 0, na.rm = TRUE),
+              late_ratio = rowMeans(dplyr::select(., all_of(column_names)) > 0, na.rm = TRUE),
+              undetemined_ratio = rowMeans(dplyr::select(., all_of(column_names)) == 0, na.rm = TRUE),
+              timing_cat = case_when(early_ratio > cutoff_mut ~ "Early", 
+                                     late_ratio > cutoff_mut ~ "Late", 
+                                     TRUE ~ "Undetermined"),
+               regulator = case_when(regulator == "neg" ~ "Neg",
+                                     regulator == "pos" ~ "Pos",
+                                     regulator == "both" ~ "Both",
+                                     TRUE ~ regulator),
+              pathway = case_when(pathway == "Antigen Presentation via MHC I" & celltype == "MHCregulators" ~ paste0(pathway, " (MHC-I) "),
+                                  pathway == "Antigen Presentation via MHC I" & celltype == "Tcells" ~ paste0(pathway, " (Tcells) "),
+                                  pathway == "Antigen Presentation via MHC Ib" & celltype == "NKcells" ~ paste0(pathway, " (NKcells) "),
+                                  pathway == "IFNg Pathway" & celltype == "NKcells" ~ paste0(pathway, " (NKcells) "),
+                                  pathway == "IFNg Signaling" & celltype == "MHCregulators" ~ paste0(pathway, " (MHC-I)"),
+                                  pathway == "IFNg Signaling" & celltype == "Tcells" ~ paste0(pathway, " (Tcells)"),
+                                  pathway == "Regulation of Autophagy" & celltype == "MHCregulators" ~ paste0(pathway, " (MHC-I)"),
+                                  pathway == "Autophagy" & celltype == "Tcells" ~ paste0(pathway, " (Tcells)"),
+                                  pathway == "HSWI SNF Pathway" ~ "SWI/SNF Pathway",
+                                  pathway == "Corticosteroid Receptor Signaling Pathway" ~ "Corticosteroid Receptor Signaling",
+                                  pathway == "PD-L1-PD-1 Checkpoint Pathway In Cancer" ~ "PD-L1/PD-1 Checkpoint Pathway",
+                                  pathway == "NOD1_2 Signaling Pathway" ~ "NOD1/2 Signaling Pathway",
+              TRUE ~ pathway)) %>% filter(pathway != "WGD", pathway != "Chromatin Disassembly", regulator != "Driver") %>%
+           filter(sample_id %in% sample_MSS)
+
+write_csv(diff_all_GSEA, paste0(path_GSEA, "diff_all_GSEA.csv"))
+```
+
+## Run DESeq2
+```{r}
+path_GSEA <- paste0(path_trans, "/Pathway_timing/", today_date, "/")
+
+regulators <- c("Pos", "Neg")
+cell_types <- c("Tcells", "MHCregulators", "NKcells", "Macrophages", "GammadeltaTcells")
+
+diff_all_GSEA <- fread(paste0(path_GSEA, "diff_all_GSEA.csv")) %>%
+  mutate(pathway_save = sub("/", "_", pathway))
+
+pathways <- unique(diff_all_GSEA$pathway_save)
+
+cell_types <- c("other")
+regulators <- c("APM")
+pathways <- c("APM")
+
+for (cell_type in cell_types) {
+  
+  for (reg in regulators) {
+    
+    diff_all_GSEAsub <- diff_all_GSEA %>% filter(celltype == !!cell_type, regulator == !!reg)
+    pathways <- unique(diff_all_GSEAsub$pathway_save)
+    
+    for (pathway in pathways) {
+    
+      Reg_difference <- diff_all_GSEAsub %>% filter(pathway_save == !!pathway) %>%
+              mutate(Timing = timing_cat,
+                 aliquot_id = sample_id) %>% filter(Timing != "Undetermined") %>%
+               dplyr::select(aliquot_id, Timing)
+      
+      Group <- LOH_MSSinput %>% inner_join(Reg_difference, by = "aliquot_id") 
+    
+      save_path <- paste0(path_GSEA, "/", cell_type, "/")
+    
+      if (!dir.exists(save_path)) {
+       dir.create(save_path, recursive = TRUE)
+       }
+    
+      file_name <- paste0(cell_type, "_", reg, "_", pathway)
+    
+      group = "Timing"
+      TCGA_DEG(input = Group, save_path = save_path, file_name = file_name, group_name = group, width_voca = 7, height_voca = 5)
+    
+    }
+    
+  }
+  
+}
+```
+
+## Caculate pathway frequencies
+```{r}
+#GSEA_path <- paste0(path_trans, ".../Project/MHC_evolution/transcriptome/APM_timing/20240614/")
+path_GSEA <- paste0(path_trans, "/Pathway_timing/", today_date, "/")
+timings <- c("early", "late")
+regulators <- c("pos", "neg")
+cell_types <- c("Tcells", "MHCregulators", "NKcells", "Macrophages", "GammadeltaTcells")
+
+cell_types <- c("other")
+regulators <- c("APM")
+pathways <- c("APM")
+
+for (cell_type in cell_types) {
+
+  save_path <- paste0(path_GSEA, "/", cell_type, "/")
+  
+  file_paths <- list.files(save_path, pattern = "_group_freq_", full.names = TRUE, recursive = TRUE)
+  file_paths <- grep("\\.csv$", file_paths, value = TRUE)
+  
+  data <- list()
+  
+  for (file in file_paths) {
+    
+    study <- basename(file)
+    study <- sub("_group_freq", "", study)
+    study <- sub(".csv", "", study)
+    
+    data[[study]] <- fread(file)
+    
+    colnames <- names(data[[study]]) 
+    
+    if ("Early" %in% colnames & "Late" %in% colnames) {
+      
+      data[[study]] <-  data[[study]] %>% filter(Early > 2, Late > 2)
+      
+    } else {
+      
+      data[[study]] <-  data[[study]] %>% mutate(Early = "NS", Late = "NS")
+      
+    }
+   
+      #separate(Study, into = c("cell_type", "regulators", "pathway"), sep = "_", extra = "merge", fill = "right") %>%
+      #mutate(timing = ifelse(grepl("pos", pathway), "late", "early"),
+      #       pathway = sub("/", "_", pathway),
+      #       pathway = str_to_title(pathway)) %>%
+      #inner_join(rename_list,., by = "pathway") %>% 
+      #mutate(pathway = pathway_new) %>% 
+      #dplyr::select(-pathway_new)
+  }
+  
+  freq_all <- tidy_list(data) %>% filter(Early != "NS" & Late != "NS")
+  write.csv(freq_all, file = paste0(save_path, "/Freq_all.csv"), row.names = FALSE)
+  
+}
+```
+
+## Combine all results
+```{r}
+timings <- c("early", "late")
+cell_types <- c("Tcells", "MHCregulators", "NKcells", "Macrophages", "GammadeltaTcells")
+
+cell_types <- c("other")
+regulators <- c("APM")
+pathways <- c("APM")
+
+for (cell_type in cell_types) {
+  
+     save_path <- paste0(path_GSEA, "/", cell_type, "/")
+  
+     file_paths <- list.files(save_path, pattern = "_Timing_PathwayC5BP", full.names = TRUE, recursive = TRUE)
+     csv_paths <- grep("\\.csv$", file_paths, value = TRUE)
+     csv_paths <- grep("_sig_", csv_paths, value = TRUE)
+     csv_paths <- grep("PathwayGOBP_", csv_paths, value = TRUE, invert = TRUE)
+    
+     freq_all <- fread(paste0(save_path, "/Freq_all.csv")) %>% 
+      separate(file_name, into = c("cell_type", "regulators", "pathway"), sep = "_", extra = "merge", fill = "right")
+     
+     data <- list()
+     
+     for (file in csv_paths) {
+      
+      study <- basename(file)
+      study <- sub("Timing_PathwayC5BP", "", study)
+      study <- sub(".csv", "", study)
+      study <- sub("_sig_", "", study)
+      study <- sub("pos", "Late_", study)
+      study <- sub("neg", "Early_", study)
+      
+      data[[study]] <- fread(file) %>% 
+        mutate(BG = sub("/.*", "", BgRatio),
+               Study = study) 
+      
+    }
+    
+    if (nrow(freq_all) > 0) {
+      all_data <- data %>% rbindlist(fill = TRUE) %>% 
+      separate(Study, into = c("cell_type", "regulators", "pathway", "timing", "type"), sep = "_", extra = "merge", fill = "right") %>% 
+      inner_join(freq_all, ., by = c("cell_type", "regulators", "pathway", "type"))
+    
+     enrich_freq <- all_data %>% 
+      group_by(ID, pathway, timing) %>%
+      dplyr::summarise(Freq = n()) %>% 
+      left_join(all_data, ., by = c("ID", "pathway", "timing")) %>% arrange(cell_type, regulators,pathway, type, timing) %>% 
+       dplyr::select(id, type, cell_type, regulators, pathway,	Late,	Early, timing, everything())
+     write.csv(enrich_freq, file = paste0(save_path, "/Freq_enrich.csv"), row.names = FALSE)
+    }
+}
+```

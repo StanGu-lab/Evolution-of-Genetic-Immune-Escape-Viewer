@@ -1,0 +1,123 @@
+---
+title: "1_3_2_APM_HLAmut"
+author: "AJ"
+date: "2025-08-07"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Loading Packages
+```{r}
+rm(list = ls())
+
+suppressMessages(library("ggplot2"))
+suppressMessages(library("patchwork"))
+suppressMessages(library("ggpubr"))
+suppressMessages(library("tidyr"))
+suppressMessages(library("broom"))
+suppressMessages(library("data.table"))
+suppressMessages(library("dplyr"))
+suppressMessages(library("forcats"))
+suppressMessages(library("textshape"))
+suppressMessages(library("ggrepel"))
+suppressMessages(library("tibble"))
+suppressMessages(library("readr"))
+suppressMessages(library("ggradar"))
+suppressMessages(library("ggsci"))
+suppressMessages(library("cowplot"))
+suppressMessages(library("ggdist"))
+
+PCAWG_path <- ".../Project/"
+source(paste0(PCAWG_path, "/code/source/basic.R"))
+source(paste0(PCAWG_path, "/code/source/oncoplot2.R"))
+
+LOH_MSI = LOH_mut <- fread(paste0(PCAWG_path, "/donors_and_biospecimens/LOH_MSI_final.csv"))
+LOH_type <- LOH_MSI %>% mutate(sample_id = aliquot_id) %>% dplyr::select(sample_id, histology_abbreviation)
+LOH_aliquot <- LOH_MSI %>% mutate(sample_id = aliquot_id) %>% dplyr::select(sample_id, icgc_sample_id, MSI_mut)
+LOH_MSS <- LOH_MSI %>% filter(MSI_mut == "MSS")
+sample_MSS <- LOH_MSS  %>% pull(aliquot_id)
+
+color_event <- c("Mut" = "#E64B35FF", "WT" = "#4DBBD5FF")
+color_APM_envet <- c("APM-Mutant" = "#E64B35FF", "APM-WT" = "#4DBBD5FF")
+figure_path <- ".../Project/Figures/20250813/"
+```
+
+# HLA mutations
+## Summarize successful run by Polysolver
+```{r}
+samplerun_icgc <- fread(".../Project/MHC_evolution/HLAmutations/results/icgc_polysover_runsamples.csv")
+samplerun_tcgc <- fread(".../Project/MHC_evolution/HLAmutations/results/tcga_polysover_runsamples.csv")
+samplerun_pcawg <- rbind(samplerun_icgc, samplerun_tcgc) %>% filter(aliquot_id %in% sample_MSS)
+length(samplerun_pcawg$aliquot_id)
+```
+
+## HLA mutations by Polysolver
+```{r}
+## HLA mutations
+path_poly = ".../Project/MHC_evolution/HLAmutations/results/"
+
+HLAmut_icgc <- fread(paste0(path_poly, "/maf_icgc_HLAmut_final.maf"))
+HLAmut_tcga <- fread(paste0(path_poly, "/maf_tcga_HLAmut_final.maf"))
+
+comm_names <- intersect(names(HLAmut_icgc), names(HLAmut_tcga))
+
+HLAmut_icgc <- HLAmut_icgc %>% dplyr::select(all_of(comm_names))
+HLAmut_tcga <- HLAmut_tcga %>% dplyr::select(all_of(comm_names))
+
+HLAmut_pcawg <- rbind(HLAmut_icgc, HLAmut_tcga) %>% distinct() %>% filter(Tumor_Sample_Barcode %in% sample_MSS)
+length(unique(HLAmut_pcawg$Tumor_Sample_Barcode))
+write.table(HLAmut_pcawg, paste0(path_poly, "/maf_pcawg_HLAmut.maf"), sep = "\t", row.names = FALSE, quote = FALSE)
+
+HLAmut_pcawg_SNV <- HLAmut_pcawg %>% filter(!Variant_Classification == "In_Frame_Del")
+length(unique(HLAmut_pcawg_SNV$Tumor_Sample_Barcode))
+
+HLAmut_pcawg_Del <- HLAmut_pcawg %>% filter(Variant_Classification == "In_Frame_Del")
+length(unique(HLAmut_pcawg_Del$Tumor_Sample_Barcode))
+
+HLAmut_pcawg <- read.maf(paste0(path_poly, "/maf_pcawg_HLAmut.maf"))
+
+title="APM_poly"
+oncoplot(HLAmut_pcawg,
+               genes = APM,
+               titleText = title,
+               writeMatrix = T,
+               removeNonMutated = F)
+old_path <- paste0("/Users/wchen20/onco_matrix_", title, ".txt")
+new_path <- paste0(".../Project/consensus_snv_indel/maf/onco_matrix_", title, ".txt")
+file.rename(from = old_path, to = new_path)
+```
+
+## non-HLA APM mutations
+```{r}
+## MAF converted from vcf
+load(".../Project/consensus_snv_indel/maf/maf_from_vcf/maf_pcawg_vcf.RData")
+
+path_maf <- ".../Project/consensus_snv_indel/maf/maf_from_vcf/"
+maf_mut <- read.maf(paste0(path_maf , "maf_pcawg_vcf_nonsyn.maf"))
+
+APM_noHLA <- c("B2M", "NLRC5", "TAP1", "TAP2" ,"TAPBP", "PSMB8", "PSMB9", "PSMB10", "ERAP1", "ERAP2")
+maf_APM_noHLA <- subsetMaf(maf_mut, genes = APM_noHLA, tsb = sample_MSS, mafObj = F)
+
+title="APM_consensus"
+oncoplot(maf_mut,
+               genes = APM,
+               titleText = title,
+               writeMatrix = T,
+               removeNonMutated = F)
+
+old_path <- paste0("/Users/wchen20/onco_matrix_", title, ".txt")
+new_path <- paste0(path_maf, "/onco_matrix_", title, ".txt")
+file.rename(from = old_path, to = new_path)
+
+## Combine
+onco_poly <- fread(".../Project/consensus_snv_indel/maf/onco_matrix_APM_poly.txt") %>% 
+  filter(V1 %in% c("HLA-A", "HLA-B", "HLA-C"))
+onco_consensus <- fread(paste0(path_maf, "/onco_matrix_APM_consensus.txt")) %>% 
+  filter(!V1 %in% c("HLA-A", "HLA-B", "HLA-C"))
+
+onco_APM_update <- rbind(onco_consensus, onco_poly, fill = TRUE)  %>% column_to_rownames("V1")
+write.table(onco_APM_update, paste0(path_maf, "/onco_APM_update.txt"), sep = "\t", quote = FALSE)
+```

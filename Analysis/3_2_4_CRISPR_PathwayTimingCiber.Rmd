@@ -1,0 +1,241 @@
+---
+title: "3_2_1_CRISPR"
+author: "AJ"
+date: "2023-11-24"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+---
+title: "MAGeCKFlute"
+author: "AJ"
+date: "2023-08-27"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE)
+```
+
+# 1. Load Packages
+```{r}
+rm(list = ls())
+
+library("dndscv")
+library("data.table")
+library("dplyr")
+library("readr")
+library("readxl")
+library("tidyr")
+library("stringr")
+library("ggplot2")
+
+source(".../Project/code/source/basic.R")
+source(".../Project/code/source/plot_dnnsall.R")
+
+PCAWG_path <- "/rsrch6/scratch/hema_bio-Malignan/wchen20/PCAWG"
+PCAWG_path <- ".../Project"
+figure_path <- ".../Project/Figures/20240827/"
+
+LOH_MSI = LOH_mut <- fread(paste0(PCAWG_path, "/donors_and_biospecimens/LOH_MSI_final.csv"))
+LOH_type <- LOH_MSI %>% mutate(sample_id = aliquot_id) %>% dplyr::select(sample_id, histology_abbreviation)
+LOH_aliquot <- LOH_MSI %>% mutate(sample_id = aliquot_id) %>% dplyr::select(sample_id, icgc_sample_id, MSI_mut)
+LOH_MSS <- LOH_MSI %>% filter(MSI_mut == "MSS")
+sample_MSS <- LOH_MSS  %>% pull(aliquot_id)
+
+sample_MSS <- LOH_MSS %>% pull(aliquot_id)
+sample_tcgaMSS <- LOH_MSI %>% filter(proj == "tcga", MSI_mut == "MSS") %>% pull(aliquot_id)
+
+cibercom_cols <- c("T_cells_CD8", "T_cells_CD4", "B_cells", "NK_cells", "Macrophage", "Dendritic_cells", "Mast_cells", "Neutrophils", "Eosinophils")
+
+rename_list <- fread(".../Project/CRISPR/CRISPRscreen20240118/rename_list.csv")
+rename_list$pathway <- str_to_title(rename_list$pathway)
+colors_timing = 
+```
+
+## Combine results
+```{r}
+ciber_path <- paste0(PCAWG_path, "/MHC_evolution/transcriptome/Cibersort/abs/241128/TCGA/single")
+file_list <- list.files(path = ciber_path, pattern = "_ciber_abs.csv", full.names = TRUE)
+file_list <- grep("all", file_list, ignore.case = TRUE, value = TRUE, invert = TRUE)
+
+ciber_list <- list()
+
+for (file in file_list) {
+  
+  file_name <- basename(file)
+  type <- gsub("_ciber_abs.csv", "", file_name)
+  
+  ciber <- fread(file) %>% dplyr::rename(sample_id = V1) %>% mutate(type = type)
+  ciber_list[[type]] <- ciber
+}
+
+LOH_mut_gr <- LOH_MSI %>% dplyr::select(submitted_specimen_id, histology_abbreviation, aliquot_id)
+
+ciber_all <- rbindlist(ciber_list) %>% 
+  filter(substr(sample_id, 14, 15) %in% sprintf("%02d", 1:9)) %>%
+  mutate(submitted_specimen_id = sub("^([^-]*-[^-]*-[^-]*-[^-]*).*", "\\1", sample_id)) %>% 
+  inner_join(LOH_mut_gr, ., by = "submitted_specimen_id") %>%
+   mutate(T_cells_CD8 = `T cells CD8`,
+         T_cells_CD4 = `T cells CD4 naive`+`T cells CD4 memory resting`+`T cells CD4 memory activated`, 
+         B_cells = `B cells naive` + `B cells memory`,
+         NK_cells = `NK cells resting`+`NK cells activated`,
+         Macrophage = `Macrophages M0` + `Macrophages M1` + `Macrophages M2`,
+         Dendritic_cells = `Dendritic cells resting` + `Dendritic cells activated`,
+         Mast_cells = `Mast cells resting` + `Mast cells activated`,
+         Neutrophils = Neutrophils,
+         Eosinophils = Eosinophils) %>%
+  dplyr::select(-Correlation, -`P-value`, -RMSE, -type, -sample_id, -`Absolute score (sig.score)`) 
+write.table(ciber_all, file = paste0(ciber_path, "/all_ciber_abs.csv"), sep = ",", row.names = FALSE, quote = FALSE)
+```
+
+# 2. 
+```{r pressure, echo=FALSE} 
+## Add mutation timing group
+path_trans <- ".../Project/MHC_evolution/transcriptome/"
+gritic_path <- paste0(".../Project/MHC_evolution/GRITIC/output/250717/summary250717/")
+cutoff_mut = 0.5
+cutoff_pathway = 0.5
+path_timeline = paste0(gritic_path, "timeline/")
+today_date <- "20250808"
+path_GSEA <- paste0(path_trans, "/Pathway_timing/", today_date, "/")
+
+ciber_res <- fread(paste0(ciber_path, "/all_ciber_abs.csv"))
+
+diff_all <- fread(paste0(gritic_path, "/diff_all.csv")) %>% 
+            mutate(sample_id = aliquot_id,
+              early_ratio = rowMeans(dplyr::select(., all_of(column_names)) < 0, na.rm = TRUE),
+              late_ratio = rowMeans(dplyr::select(., all_of(column_names)) > 0, na.rm = TRUE),
+              undetemined_ratio = rowMeans(dplyr::select(., all_of(column_names)) == 0, na.rm = TRUE),
+              timing_cat = case_when(early_ratio > cutoff_mut ~ "Early", 
+                                     late_ratio > cutoff_mut ~ "Late", 
+                                     TRUE ~ "Undetermined"),
+               regulator = case_when(regulator == "neg" ~ "Neg",
+                                     regulator == "pos" ~ "Pos",
+                                     regulator == "both" ~ "Both",
+                                     TRUE ~ regulator),
+              pathway = case_when(pathway == "Antigen Presentation via MHC I" & celltype == "MHCregulators" ~ paste0(pathway, " (MHC-I) "),
+                                  pathway == "Antigen Presentation via MHC I" & celltype == "Tcells" ~ paste0(pathway, " (Tcells) "),
+                                  pathway == "Antigen Presentation via MHC Ib" & celltype == "NKcells" ~ paste0(pathway, " (NKcells) "),
+                                  pathway == "IFNg Pathway" & celltype == "NKcells" ~ paste0(pathway, " (NKcells) "),
+                                  pathway == "IFNg Signaling" & celltype == "MHCregulators" ~ paste0(pathway, " (MHC-I)"),
+                                  pathway == "IFNg Signaling" & celltype == "Tcells" ~ paste0(pathway, " (Tcells)"),
+                                  pathway == "Regulation of Autophagy" & celltype == "MHCregulators" ~ paste0(pathway, " (MHC-I)"),
+                                  pathway == "Autophagy" & celltype == "Tcells" ~ paste0(pathway, " (Tcells)"),
+                                  pathway == "HSWI SNF Pathway" ~ "SWI/SNF Pathway",
+                                  pathway == "Corticosteroid Receptor Signaling Pathway" ~ "Corticosteroid Receptor Signaling",
+                                  pathway == "PD-L1-PD-1 Checkpoint Pathway In Cancer" ~ "PD-L1/PD-1 Checkpoint Pathway",
+                                  pathway == "NOD1_2 Signaling Pathway" ~ "NOD1/2 Signaling Pathway",
+              TRUE ~ pathway)) %>% filter(pathway != "WGD", pathway != "Chromatin Disassembly", regulator != "Driver") %>%
+           filter(sample_id %in% sample_MSS)
+
+diff_all_ciber <- inner_join(diff_all, ciber_res, by = "aliquot_id") %>% 
+  dplyr::select(-contains(".y")) %>% 
+  rename_with(~ gsub("\\.x$", "", .)) %>% 
+  filter(regulator != "Driver") %>% 
+  dplyr::select(pathway, histology_abbreviation, timing_cat, all_of(cibercom_cols)) 
+
+write_csv(diff_all_ciber, paste0(path_save, "/cibertiming_all.csv"))
+```
+
+## CIBCESORT results by  mutation timing
+```{r}
+mode = "total"
+cibercom_cols <- c("T_cells_CD8", "T_cells_CD4", "T_gamma_delta", "Plasma_cells", "B_cells", "NK_cells", "Macrophage", "Dendritic_cells", "Mast_cells", "Neutrophils", "Eosinophils")
+
+diff_all_ciber <- fread(paste0(path_save, "/cibertiming_all.csv")) %>% mutate(pathway = sub("/", "_", pathway))
+types <- unique(diff_all_ciber$histology_abbreviation)
+
+for (type in types) {
+  
+  ciber_type <- subset(diff_all_ciber, histology_abbreviation == type)
+  
+  patway_n <- as.data.frame(table(ciber_type$pathway, ciber_type$timing_cat)) %>% 
+    setNames(c("pathway", "Timing", "Freq")) %>%
+    pivot_wider(
+    names_from = Timing,     
+    values_from = Freq,       
+    values_fill = list(Freq = 0))
+    
+  if (mode == "total") {
+    ## By total number
+    ciber_type_filter <- ciber_type %>%
+    group_by(pathway) %>% 
+    summarise(Sum_determined = n()) %>% 
+    ungroup %>% 
+    inner_join(., ciber_type, by = "pathway") %>%
+    filter(Sum_determined > 9)
+    
+  } else if (mode == "determined") {
+    ## By determined mutations
+    ciber_type_filter <- ciber_type %>% filter(timing_cat != "Undetermined") %>%
+    group_by(pathway) %>% 
+    summarise(Sum_determined = n()) %>% 
+    ungroup %>% 
+    inner_join(., ciber_type, by = "pathway") %>%
+    filter(Sum_determined > 4)
+  }
+        
+   if(!dir.exists(paste0(path_save,"/", mode, "/"))) {
+        dir.create(paste0(path_save,"/", mode, "/"))
+      }
+             
+  ## Wilcoxon
+  pathways_group <- ciber_type_filter %>% filter(timing_cat != "Undetermined") %>%
+      group_by(pathway) %>%
+      filter(n_distinct(timing_cat) >= 2) %>% 
+      ungroup() %>% pull(pathway) %>% unique(.)
+  
+  if (length(pathways_group) > 0) {
+    
+    ciber_long <- ciber_type_filter %>% filter(pathway %in% pathways_group) %>% 
+      filter(timing_cat != "Undetermined") %>%
+      gather(cell_type, Value_1, -pathway, -histology_abbreviation, -timing_cat, -Sum_determined) %>% 
+      mutate(Value_1 = as.numeric(Value_1),
+             cell_type = as.factor(cell_type)) %>% 
+      filter(cell_type %in% cibercom_cols)
+    
+    wilcox_res <- ciber_long %>%
+      group_by(pathway, cell_type) %>%
+      do(tidy(wilcox.test(Value_1 ~ timing_cat, data = .))) %>%
+      ungroup() %>%
+      mutate(fdr = p.adjust(p.value, method = "fdr")) 
+    write.table(wilcox_res, file = paste0(path_save,"/", mode, "/Timing_wilcox_", type, ".csv"), sep = ",", row.names = FALSE, quote = FALSE)
+    
+    wilcox_sig <- wilcox_res %>% filter(fdr < 0.1)
+    write.table(wilcox_sig, file = paste0(path_save,"/", mode, "/Timing_wilcox_sig", type, ".csv"), sep = ",", row.names = FALSE, quote = FALSE)
+    
+    for (pathway in pathways_group) {
+      
+      ciber_longsub <- ciber_long %>% filter(pathway == !!pathway)
+       
+      p_ciber <- ggplot(ciber_longsub, aes(x = cell_type, y = Value_1, fill = timing_cat)) + 
+         geom_boxplot(outlier.shape = NA, alpha = 0.7) +
+         #geom_violin(adjust = 3) +
+         geom_boxplot(outlier.shape = NA, alpha = 0.7, position = position_dodge(width = 0.75)) +  # Box plot
+         geom_jitter(aes(color = timing_cat),
+                     position = position_jitterdodge(jitter.width = 0.2, dodge.width = 0.75),  # Jitter points
+                     size = 1.5, alpha = 0.8) +
+         scale_fill_manual(values = color_timing) +
+         theme_minimal() +
+         theme(axis.text.x = element_text(angle = 45, hjust = 1, size = 18, face = "bold", color = "black"),
+          axis.title.y = element_text(size = 16),
+          title = element_text(size = 20, face = "bold"),
+          text = element_text(size = 16)) +
+         labs(x = "", y = "Score", fill = "timing_cat") +
+         ggtitle(paste0(type, " - ", pathway)) + 
+         stat_compare_means(
+           aes(group = timing_cat),
+           method = "wilcox.test",
+           label = "p.signif",
+           size = 6)
+
+          ggsave(filename =  paste0(path_save,"/", mode, "/Timing_wilcox_", type,"_", pathway, ".pdf"), 
+                 plot = p_ciber, width = 15, height = 6, units = "in")
+    }
+  }
+}
+```

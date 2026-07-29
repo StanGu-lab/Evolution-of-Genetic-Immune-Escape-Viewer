@@ -16,8 +16,8 @@
 #BSUB -o /rsrch6/home/hema_bio-Malignan/Gu_lab_projects/WenjieChen/PCAWG/MHC_evolution/GRITIC
 
 module load python/3.11.3
-python /rsrch6/home/hema_bio-Malignan/wchen20/code/source/convert_to_csv20240327_tcga.py
-python /rsrch6/home/hema_bio-Malignan/wchen20/code/source/convert_to_csv20240327_icgc.py
+python ${path_home}/code/source/convert_to_csv20240327_tcga.py
+python ${path_home}/code/source/convert_to_csv20240327_icgc.py
 ```
 
 ## ----------------------------------------------------------
@@ -51,7 +51,7 @@ library("vcfR")
 #dataset = "icgc"
 #maf_file = paste0(PCAWG_path, "/consensus_snv_indel/final_consensus_snv_indel_passonly_", dataset, "_annoted/annoted/d30d48a0a724507b40b2f5f0d2953c78.consensus.20160830.somatic.snv_mnv.maf")
 
-PCAWG_path <- "/rsrch6/scratch/hema_bio-Malignan/wchen20/PCAWG"
+PCAWG_path <- "${path_rsrch}/PCAWG"
 path_griticinput <- paste0(PCAWG_path, "/MHC_evolution/GRITIC/input/240820/")
 
 purity <- fread(paste0(PCAWG_path, "/consensus_cnv/consensus.20170217.purity.ploidy.txt")) %>% 
@@ -62,14 +62,14 @@ write.table(purity, file = paste0(PCAWG_path, "/MHC_evolution/GRITIC/input/purit
 
 projects <- c("tcga", "icgc")
 
-HLAmut_path <- "/rsrch6/scratch/hema_bio-Malignan/wchen20/PCAWG/MHC_evolution/HLAmutations/"
+HLAmut_path <- "${path_rsrch}/PCAWG/MHC_evolution/HLAmutations/"
 maf_HLAmut <- fread(paste0(HLAmut_path, "/results/maf_HLAmut.maf")) %>% mutate(Chromosome = sub("chr", "", Chromosome))
 hla_sampleid <- unique(maf_HLAmut$Tumor_Sample_Barcode)
 
 for (proj in projects) {
   #proj = "tcga"
   # SNV
-  maf_gritic_path <- paste0("/rsrch6/scratch/hema_bio-Malignan/wchen20/PCAWG/consensus_snv_indel/vcf/", proj, "_filtered/annoted/")
+  maf_gritic_path <- paste0("${path_rsrch}/PCAWG/consensus_snv_indel/vcf/", proj, "_filtered/annoted/")
   maf_files <- list.files(path = maf_gritic_path, pattern = ".consensus.20160830.filtered.somatic.snv_mnv.maf", recursive = FALSE, full.names = TRUE)
   out_path <- paste0("/rsrch6/home/hema_bio-Malignan/Gu_lab_projects/WenjieChen/PCAWG/MHC_evolution/GRITIC/output/filtered/", proj)
   
@@ -194,7 +194,7 @@ library("vcfR")
 #dataset = "icgc"
 #maf_file = paste0(PCAWG_path, "/consensus_snv_indel/final_consensus_snv_indel_passonly_", dataset, "_annoted/annoted/d30d48a0a724507b40b2f5f0d2953c78.consensus.20160830.somatic.snv_mnv.maf")
 
-PCAWG_path <- "/rsrch6/scratch/hema_bio-Malignan/wchen20/PCAWG"
+PCAWG_path <- "${path_rsrch}/PCAWG"
 path_griticinput <- paste0(PCAWG_path, "/MHC_evolution/GRITIC/input/240820/")
 
 LOH_mut <- fread(paste0(PCAWG_path, "/donors_and_biospecimens/LOH_MSI.csv")) %>% mutate(samplename = aliquot_id) %>% 
@@ -208,7 +208,7 @@ write.table(purity, file = paste0(PCAWG_path, "/MHC_evolution/GRITIC/input/purit
 
 projects <- c("tcga", "icgc")
 
-HLAmut_path <- "/rsrch6/scratch/hema_bio-Malignan/wchen20/PCAWG/MHC_evolution/HLAmutations/"
+HLAmut_path <- "${path_rsrch}/PCAWG/MHC_evolution/HLAmutations/"
 maf_HLAmut <- fread(paste0(HLAmut_path, "/results/maf_HLAmut.maf")) %>% mutate(Chromosome = sub("chr", "", Chromosome))
 hla_sampleid <- unique(maf_HLAmut$Tumor_Sample_Barcode)
 
@@ -287,7 +287,7 @@ pip install gritic --user
 pip install numba --user
 
 cd /rsrch6/home/hema_bio-Malignan/Gu_lab_projects/WenjieChen/PCAWG/MHC_evolution/GRITIC
-griticnew_path="/rsrch6/home/hema_bio-Malignan/wchen20/gritic"
+griticnew_path="${path_home}/gritic"
 
 tumour_id="0009b464-b376-4fbc-8a56-da538269a02f"
 samplename="0009b464-b376-4fbc-8a56-da538269a02f"
@@ -367,9 +367,9 @@ git pull origin wgd_timing
 
 module load python/3.10.5-gdc
 
-cd /rsrch6/home/hema_bio-Malignan/wchen20/GRITIC/gritic_snv
-gritic="/rsrch6/home/hema_bio-Malignan/wchen20/GRITIC/gritic/"
-gritic_snv="/rsrch6/home/hema_bio-Malignan/wchen20/GRITIC/gritic_snv/"
+cd ${path_home}/GRITIC/gritic_snv
+gritic="${path_home}/GRITIC/gritic/"
+gritic_snv="${path_home}/GRITIC/gritic_snv/"
 
 python ${gritic}/rungritic_cmd.py --mutation_table ./test_data/test_mutation_table.tsv \
                         --copy_number_table ./test_data/test_cn_table.tsv \
@@ -392,8 +392,8 @@ python ${gritic_snv}/run_snv_timing.py --sample_id test --input_dir ./test_griti
 #BSUB -R rusage[mem=400]
 #BSUB -P PCAWG
 #BSUB -J GRITIC
-#BSUB -o /rsrch6/scratch/hema_bio-Malignan/wchen20/PCAWG/MHC_evolution/GRITIC/GRITICsnv_output.log
-#BSUB -e /rsrch6/scratch/hema_bio-Malignan/wchen20/PCAWG/MHC_evolution/GRITIC/GRITICsnv_error.log
+#BSUB -o ${path_rsrch}/PCAWG/MHC_evolution/GRITIC/GRITICsnv_output.log
+#BSUB -e ${path_rsrch}/PCAWG/MHC_evolution/GRITIC/GRITICsnv_error.log
 
 ## If error occur then quit the task
 set -e
@@ -407,10 +407,10 @@ wait_for_free_slot() {
 }
 
 module load python/3.10.5-gdc
-gritic="/rsrch6/home/hema_bio-Malignan/wchen20/GRITIC/250/gritic"
-gritic_snv="/rsrch6/home/hema_bio-Malignan/wchen20/GRITIC/250/gritic_snv"
+gritic="${path_home}/GRITIC/250/gritic"
+gritic_snv="${path_home}/GRITIC/250/gritic_snv"
 
-path_gritic="/rsrch6/scratch/hema_bio-Malignan/wchen20/PCAWG/MHC_evolution/GRITIC/"
+path_gritic="${path_rsrch}/PCAWG/MHC_evolution/GRITIC/"
 path_in="${path_gritic}/input/"
 
 datasets=("snv" "snv_indel")
@@ -421,7 +421,7 @@ types="ColoRect-AdenoCA"
 
 for type in "${types[@]}"; do
   
-  paired_list="/rsrch6/scratch/hema_bio-Malignan/wchen20/PCAWG/MHC_evolution/GRITIC/input/purity_${type}.txt"
+  paired_list="${path_rsrch}/PCAWG/MHC_evolution/GRITIC/input/purity_${type}.txt"
 
     tail -n +2 "$paired_list" | while IFS=$'\t' read -r samplename purity wgd histology_abbreviation clonal; do
       
@@ -515,8 +515,8 @@ done
 ## 3. Update HLA results by Polysolver
 ## ----------------------------------------------------------
 ```sh
-paired_list="/rsrch6/scratch/hema_bio-Malignan/wchen20/PCAWG/MHC_evolution/GRITIC/input/250306/purity_icgc.txt"
-path_GRITIC="/rsrch6/scratch/hema_bio-Malignan/wchen20/PCAWG/MHC_evolution/GRITIC/"
+paired_list="${path_rsrch}/PCAWG/MHC_evolution/GRITIC/input/250306/purity_icgc.txt"
+path_GRITIC="${path_rsrch}/PCAWG/MHC_evolution/GRITIC/"
 
 tail -n +2 "$paired_list" | while IFS=$'\t' read -r samplename purity wgd histology_abbreviation snv_table cn_table clonal; do
 
@@ -531,41 +531,41 @@ done
 ```sh
 #BSUB -W 24:00
 #BSUB -q medium
-#BSUB –cwd /rsrch6/scratch/hema_bio-Malignan/wchen20/TCGA/MHC_evolution/
+#BSUB –cwd ${path_rsrch}/TCGA/MHC_evolution/
 #BSUB –u wchen20@mdanderson.org
 #BSUB -n 12
 #BSUB -M 500
 #BSUB -R rusage[mem=500]
 #BSUB -P PCAWG
 #BSUB -J PCAWG_GRITIC
-#BSUB -o /rsrch6/scratch/hema_bio-Malignan/wchen20/PCAWG/MHC_evolution/GRITIC/pcawg_output_%J.log
-#BSUB -e /rsrch6/scratch/hema_bio-Malignan/wchen20/PCAWG/MHC_evolution/GRITIC/pcawg_error_%J.log
+#BSUB -o ${path_rsrch}/PCAWG/MHC_evolution/GRITIC/pcawg_output_%J.log
+#BSUB -e ${path_rsrch}/PCAWG/MHC_evolution/GRITIC/pcawg_error_%J.log
 
-path_code="/rsrch6/home/hema_bio-Malignan/wchen20/code/source/"
-path_input="/rsrch6/scratch/hema_bio-Malignan/wchen20/PCAWG/MHC_evolution/GRITIC/input/250306/"
-path_output="/rsrch6/scratch/hema_bio-Malignan/wchen20/PCAWG/MHC_evolution/GRITIC/output/HLAupdate/250708/"
+path_code="${path_home}/code/source/"
+path_input="${path_rsrch}/PCAWG/MHC_evolution/GRITIC/input/250306/"
+path_output="${path_rsrch}/PCAWG/MHC_evolution/GRITIC/output/HLAupdate/250708/"
 project="pcawg"
-path_anno="/rsrch6/scratch/hema_bio-Malignan/wchen20/PCAWG/consensus_snv_indel/vcf_HLAupdated/${project}/sample_updatedHLA/"
+path_anno="${path_rsrch}/PCAWG/consensus_snv_indel/vcf_HLAupdated/${project}/sample_updatedHLA/"
 
 projects=("pcwag")
 job_num=5
 timelimit=no
 time=30
 
-paired_list="/rsrch6/scratch/hema_bio-Malignan/wchen20/PCAWG/MHC_evolution/GRITIC/input/250306/purity_${project}.txt"
+paired_list="${path_rsrch}/PCAWG/MHC_evolution/GRITIC/input/250306/purity_${project}.txt"
 bash ${path_code}/GRITIC_loop.sh ${path_input} ${path_output} ${path_anno} ${job_num} ${projects} ${timelimit} ${time} ${paired_list}
 
-bsub < /rsrch6/scratch/hema_bio-Malignan/wchen20/PCAWG/MHC_evolution/GRITIC/griticHLA250613.lsf
+bsub < ${path_rsrch}/PCAWG/MHC_evolution/GRITIC/griticHLA250613.lsf
 
 ## Copy to a folder
-find /rsrch6/scratch/hema_bio-Malignan/wchen20/PCAWG/MHC_evolution/GRITIC/output/HLAupdate/250708/snv/subclonal/ \
+find ${path_rsrch}/PCAWG/MHC_evolution/GRITIC/output/HLAupdate/250708/snv/subclonal/ \
   -type f -name "*mafnongritic.csv"|wc -l
 
-find /rsrch6/scratch/hema_bio-Malignan/wchen20/PCAWG/MHC_evolution/GRITIC/output/HLAupdate/250708/snv/subclonal/ \
+find ${path_rsrch}/PCAWG/MHC_evolution/GRITIC/output/HLAupdate/250708/snv/subclonal/ \
   -type f -name "*_mafgritic.csv" \
-  -exec cp {} /rsrch6/scratch/hema_bio-Malignan/wchen20/PCAWG/MHC_evolution/GRITIC/output/HLAupdate/250708/snv/summary250717 \;
+  -exec cp {} ${path_rsrch}/PCAWG/MHC_evolution/GRITIC/output/HLAupdate/250708/snv/summary250717 \;
 
-scp -r wchen20@seadragon:/rsrch6/scratch/hema_bio-Malignan/wchen20/PCAWG/MHC_evolution/GRITIC/output/HLAupdate/250708/snv/subclonal/summary250717 /Users/wchen20/Desktop/PCAWG/MHC_evolution/GRITIC/output/250717/dict
+scp -r wchen20@seadragon:${path_rsrch}/PCAWG/MHC_evolution/GRITIC/output/HLAupdate/250708/snv/subclonal/summary250717 /Users/wchen20/Desktop/PCAWG/MHC_evolution/GRITIC/output/250717/dict
 ```
 
 ## ----------------------------------------------------------
@@ -588,7 +588,7 @@ library("tidyr")
 non_syn = c("Frame_Shift_Del", "Frame_Shift_Ins", "Splice_Site", "Translation_Start_Site", "Nonsense_Mutation", "Nonstop_Mutation", "In_Frame_Del", "In_Frame_Ins", "Missense_Mutation")
 APM = c("HLA-A", "HLA-B", "HLA-C","B2M", "NLRC5", "TAP1", "TAP2" ,"TAPBP", "PSMB8", "PSMB9", "PSMB10", "ERAP1", "ERAP2")
 
-PCAWG_path <- "/rsrch6/scratch/hema_bio-Malignan/wchen20/PCAWG"
+PCAWG_path <- "${path_rsrch}/PCAWG"
 maf_path <- paste0(PCAWG_path, "/MHC_evolution/snv_indel/annoted_all")
 gritic_path <- "/rsrch6/home/hema_bio-Malignan/Gu_lab_projects/WenjieChen/PCAWG/MHC_evolution/GRITIC/output/SNV_timingnew/"
 
@@ -596,9 +596,9 @@ projects <- c("tcga", "icgc")
 
 for (proj in projects) {
   
-  maf_gritic_path <- paste0("/rsrch6/scratch/hema_bio-Malignan/wchen20/PCAWG/consensus_snv_indel/final_consensus_12oct/", proj, "_filtered/annoted/")
+  maf_gritic_path <- paste0("${path_rsrch}/PCAWG/consensus_snv_indel/final_consensus_12oct/", proj, "_filtered/annoted/")
   maf_files <- list.files(path = maf_gritic_path, pattern = ".consensus.20160830.filtered.somatic.snv_mnv.maf", recursive = TRUE, full.names = TRUE)
-  out_path <- paste0("/rsrch6/scratch/hema_bio-Malignan/wchen20/PCAWG/MHC_evolution/GRITIC/output/filtered/", proj)
+  out_path <- paste0("${path_rsrch}/PCAWG/MHC_evolution/GRITIC/output/filtered/", proj)
   
   for (maf_file in maf_files) {
     
@@ -637,19 +637,19 @@ library(ggplot2)
 library(bayestestR)
 library(matrixStats)
 
-PCAWG_path <- "/rsrch6/scratch/hema_bio-Malignan/wchen20/PCAWG"
-source("/rsrch6/home/hema_bio-Malignan/wchen20/code/source/basic.R")
-source("/rsrch6/home/hema_bio-Malignan/wchen20/code/source/insert_newlines.R")
-source("/rsrch6/home/hema_bio-Malignan/wchen20/code/source/plot_segTiming.R")
+PCAWG_path <- "${path_rsrch}/PCAWG"
+source("${path_home}/code/source/basic.R")
+source("${path_home}/code/source/insert_newlines.R")
+source("${path_home}/code/source/plot_segTiming.R")
 
-LOH_MSI <- fread("/rsrch6/scratch/hema_bio-Malignan/wchen20/PCAWG/donors_and_biospecimens/LOH_MSI_final.csv")
+LOH_MSI <- fread("${path_rsrch}/PCAWG/donors_and_biospecimens/LOH_MSI_final.csv")
 column_names <- paste0("X", 0:249)
-path_gritic <- "/rsrch6/scratch/hema_bio-Malignan/wchen20/PCAWG/MHC_evolution/GRITIC/output/filtered/"
+path_gritic <- "${path_rsrch}/PCAWG/MHC_evolution/GRITIC/output/filtered/"
 breaks_seq <- seq(0, 1.05, by = 0.05)
 
-df_sample_HLA <- fread("/rsrch6/scratch/hema_bio-Malignan/wchen20/PCAWG/MHC_evolution/GRITIC/output/HLAupdate/sample_HLA.csv") %>% 
+df_sample_HLA <- fread("${path_rsrch}/PCAWG/MHC_evolution/GRITIC/output/HLAupdate/sample_HLA.csv") %>% 
 pull(sample_id)
-path_gritic_HLA <- "/rsrch6/scratch/hema_bio-Malignan/wchen20/PCAWG/MHC_evolution/GRITIC/output/HLAupdate/250708/snv/summary250717/"
+path_gritic_HLA <- "${path_rsrch}/PCAWG/MHC_evolution/GRITIC/output/HLAupdate/250708/snv/summary250717/"
 
 for (type in unique(LOH_MSI$histology_abbreviation)) {
   
@@ -722,12 +722,12 @@ library(ggplot2)
 library(bayestestR)
 library(matrixStats)
 
-PCAWG_path <- "/rsrch6/scratch/hema_bio-Malignan/wchen20/PCAWG"
-source("/rsrch6/home/hema_bio-Malignan/wchen20/code/source/basic.R")
-source("/rsrch6/home/hema_bio-Malignan/wchen20/code/source/insert_newlines.R")
-source("/rsrch6/home/hema_bio-Malignan/wchen20/code/source/plot_segTiming.R")
+PCAWG_path <- "${path_rsrch}/PCAWG"
+source("${path_home}/code/source/basic.R")
+source("${path_home}/code/source/insert_newlines.R")
+source("${path_home}/code/source/plot_segTiming.R")
 
-LOH_MSI <- fread("/rsrch6/scratch/hema_bio-Malignan/wchen20/PCAWG/donors_and_biospecimens/LOH_MSI_final.csv")
+LOH_MSI <- fread("${path_rsrch}/PCAWG/donors_and_biospecimens/LOH_MSI_final.csv")
 
 breaks_seq <- seq(0, 1.05, by = 0.05)
 
@@ -739,8 +739,8 @@ bin_levels <- c(
 
 props <- c(0.5, 0.6, 0.7, 0.8, 0.95)
 
-path_gritic <- "/rsrch6/scratch/hema_bio-Malignan/wchen20/PCAWG/MHC_evolution/GRITIC/output/filtered/"
-path_hdi <- "/rsrch6/scratch/hema_bio-Malignan/wchen20/PCAWG/MHC_evolution/GRITIC/output/filtered/hdi/"
+path_gritic <- "${path_rsrch}/PCAWG/MHC_evolution/GRITIC/output/filtered/"
+path_hdi <- "${path_rsrch}/PCAWG/MHC_evolution/GRITIC/output/filtered/hdi/"
 
 mafgritic_files <- list.files(path = path_gritic, pattern = "mafgritic_*", recursive = FALSE, full.names = TRUE)
 mafgritic_files <- mafgritic_files[!grepl("mafgritic_ratio*", mafgritic_files)]
@@ -828,17 +828,17 @@ library(matrixStats)
 library(furrr)
 library(future)
 
-PCAWG_path <- "/rsrch6/scratch/hema_bio-Malignan/wchen20/PCAWG"
-source("/rsrch6/home/hema_bio-Malignan/wchen20/code/source/basic.R")
-source("/rsrch6/home/hema_bio-Malignan/wchen20/code/source/insert_newlines.R")
-source("/rsrch6/home/hema_bio-Malignan/wchen20/code/source/plot_segTiming.R")
+PCAWG_path <- "${path_rsrch}/PCAWG"
+source("${path_home}/code/source/basic.R")
+source("${path_home}/code/source/insert_newlines.R")
+source("${path_home}/code/source/plot_segTiming.R")
 
-LOH_MSI <- fread("/rsrch6/scratch/hema_bio-Malignan/wchen20/PCAWG/donors_and_biospecimens/LOH_MSI_final.csv")
+LOH_MSI <- fread("${path_rsrch}/PCAWG/donors_and_biospecimens/LOH_MSI_final.csv")
 column_names <- paste0("X", 0:249)
-path_gritic <- "/rsrch6/scratch/hema_bio-Malignan/wchen20/PCAWG/MHC_evolution/GRITIC/output/filtered/new/"
+path_gritic <- "${path_rsrch}/PCAWG/MHC_evolution/GRITIC/output/filtered/new/"
 breaks_seq <- seq(0, 1.05, by = 0.05)
 
-driver_mutations <- fread("/rsrch6/scratch/hema_bio-Malignan/wchen20/PCAWG/driver_mutations/drivermutation_all.csv") %>%
+driver_mutations <- fread("${path_rsrch}/PCAWG/driver_mutations/drivermutation_all.csv") %>%
   mutate(Hugo_Symbol = gene,
          Reference_Allele = ref,
          Tumor_Seq_Allele1 = ref,
@@ -926,10 +926,10 @@ library(ggplot2)
 library(bayestestR)
 library(matrixStats)
 
-PCAWG_path <- "/rsrch6/scratch/hema_bio-Malignan/wchen20/PCAWG"
-source("/rsrch6/home/hema_bio-Malignan/wchen20/code/source/basic.R")
-source("/rsrch6/home/hema_bio-Malignan/wchen20/code/source/insert_newlines.R")
-source("/rsrch6/home/hema_bio-Malignan/wchen20/code/source/plot_segTiming.R")
+PCAWG_path <- "${path_rsrch}/PCAWG"
+source("${path_home}/code/source/basic.R")
+source("${path_home}/code/source/insert_newlines.R")
+source("${path_home}/code/source/plot_segTiming.R")
 
 mafgritic_files <- list.files(path = path_gritic, pattern = "mafgritic_*", recursive = FALSE, full.names = TRUE)
 mafgritic_files <- mafgritic_files[!grepl("mafgritic_ratio_",mafgritic_files)]
@@ -984,14 +984,14 @@ library(ggplot2)
 library(bayestestR)
 library(matrixStats)
 
-PCAWG_path <- "/rsrch6/scratch/hema_bio-Malignan/wchen20/PCAWG"
-source("/rsrch6/home/hema_bio-Malignan/wchen20/code/source/basic.R")
-source("/rsrch6/home/hema_bio-Malignan/wchen20/code/source/insert_newlines.R")
-source("/rsrch6/home/hema_bio-Malignan/wchen20/code/source/plot_segTiming.R")
+PCAWG_path <- "${path_rsrch}/PCAWG"
+source("${path_home}/code/source/basic.R")
+source("${path_home}/code/source/insert_newlines.R")
+source("${path_home}/code/source/plot_segTiming.R")
 
-LOH_MSI      <- fread("/rsrch6/scratch/hema_bio-Malignan/wchen20/PCAWG/donors_and_biospecimens/LOH_MSI_final.csv")
+LOH_MSI      <- fread("${path_rsrch}/PCAWG/donors_and_biospecimens/LOH_MSI_final.csv")
 column_names <- paste0("X", 0:249)
-path_gritic  <- "/rsrch6/scratch/hema_bio-Malignan/wchen20/PCAWG/MHC_evolution/GRITIC/output/filtered/"
+path_gritic  <- "${path_rsrch}/PCAWG/MHC_evolution/GRITIC/output/filtered/"
 
 mafgritic_files <- list.files(path = path_gritic, pattern = "mafgritic_*", recursive = FALSE, full.names = TRUE)
 mafgritic_files <- mafgritic_files[!grepl("mafgritic_ratio_", mafgritic_files)]
@@ -1078,10 +1078,10 @@ for (file in mafgritic_files) {
 ## ----------------------------------------------------------
 ```sh
 module load python/2.7.18
-PhylogicNDT_path=/rsrch6/home/hema_bio-Malignan/wchen20/PhylogicNDT/PhylogicNDT
+PhylogicNDT_path=${path_home}/PhylogicNDT/PhylogicNDT
 
-base_dir="/rsrch6/scratch/hema_bio-Malignan/wchen20/PCAWG/MHC_evolution/GRITIC/output/LeagueModel/PhylogicNDT/comp/min_drivermutation/nocnv/"
-base_dir="/rsrch6/scratch/hema_bio-Malignan/wchen20/PCAWG/MHC_evolution/GRITIC/output/LeagueModel/PhylogicNDT/comp/min_drivermutation/wgd_hlaloh/"
+base_dir="${path_rsrch}/PCAWG/MHC_evolution/GRITIC/output/LeagueModel/PhylogicNDT/comp/min_drivermutation/nocnv/"
+base_dir="${path_rsrch}/PCAWG/MHC_evolution/GRITIC/output/LeagueModel/PhylogicNDT/comp/min_drivermutation/wgd_hlaloh/"
 
 mkdir -p ${base_dir}
 mkdir -p ${plot_dir}
@@ -1118,7 +1118,7 @@ python ${PhylogicNDT_path}/PhylogicNDT_plot.py \
 
 ## Subsampling
 cohort="ColoRect-AdenoCA"
-cd /rsrch6/scratch/hema_bio-Malignan/wchen20/PCAWG/MHC_evolution/GRITIC/output/LeagueModel/PhylogicNDT/comp/min_drivermutation/nocnv/ColoRect-AdenoCA_all
+cd ${path_rsrch}/PCAWG/MHC_evolution/GRITIC/output/LeagueModel/PhylogicNDT/comp/min_drivermutation/nocnv/ColoRect-AdenoCA_all
 
 for d in */; do
     d=${d%/}      # remove trailing /
@@ -1141,6 +1141,6 @@ find ${base_dir} -type f -name "*log_odds*" -exec cp {} ${plot_dir} \;
 
 echo ${plot_dir}
 mkdir -p /Users/wchen20/Desktop/2026-02-16_Draft/Revision/R1Major5/pathway_min/min_5/all/PhylogicNDT/ColoRect-AdenoCA/
-scp -r wchen20@seadragon:/rsrch6/scratch/hema_bio-Malignan/wchen20/PCAWG/MHC_evolution/GRITIC/output/LeagueModel/PhylogicNDT/comp/no_median_League_plot//all/ColoRect-AdenoCA/* /Users/wchen20/Desktop/2026-02-16_Draft/Revision/R1Major5/pathway_min/min_5/all/PhylogicNDT/ColoRect-AdenoCA/
+scp -r wchen20@seadragon:${path_rsrch}/PCAWG/MHC_evolution/GRITIC/output/LeagueModel/PhylogicNDT/comp/no_median_League_plot//all/ColoRect-AdenoCA/* /Users/wchen20/Desktop/2026-02-16_Draft/Revision/R1Major5/pathway_min/min_5/all/PhylogicNDT/ColoRect-AdenoCA/
 
 ```

@@ -1,0 +1,240 @@
+---
+title: "3_2_1_CRISPR"
+author: "AJ"
+date: "2023-11-24"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+---
+title: "MAGeCKFlute"
+author: "AJ"
+date: "2023-08-27"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE)
+```
+
+# 0. Install and load the required packages
+```{r}
+rm(list = ls())
+
+suppressWarnings(library("data.table"))
+suppressWarnings(library("dplyr"))
+suppressWarnings(library("rmarkdown"))
+suppressWarnings(library("readr"))
+suppressWarnings(library("tidyr"))
+suppressWarnings(library("maftools"))
+suppressWarnings(library("stringr"))
+suppressWarnings(library("ggsci"))
+suppressWarnings(library("ggplot2"))
+suppressWarnings(library("biomaRt"))
+suppressWarnings(library("patchwork"))
+suppressWarnings(library("tibble"))
+suppressMessages(library("ggradar"))
+suppressMessages(library("broom"))
+
+PCAWG_path <- "/Users/wchen20/Desktop/PCAWG/"
+source(paste0(PCAWG_path, "/code/source/basic.R"))
+source("/Users/wchen20/Desktop/PCAWG/code/source/EnrichedView_modified.R")
+source("/Users/wchen20/Desktop/PCAWG/code/source/TCGA_DEG250410.R")
+#source("/Users/wchen20/Desktop/PCAWG/code/source/CRP_MAGEMSig0206.R")
+source("/Users/wchen20/Desktop/PCAWG/code/source/insert_newlines.R")
+source("/Users/wchen20/Desktop/PCAWG/code/source/GRITIC_summary.R")
+source(paste0(PCAWG_path, "/code/source/oncoplot2.R"))
+source(paste0(PCAWG_path, "/code/source/Mutation_all.R"))
+
+grid.draw.ggsurvplot <- function(x){
+  survminer:::print.ggsurvplot(x, newpage = FALSE)
+}
+
+rename_list <- fread("/Users/wchen20/Desktop/PCAWG/CRISPR/CRISPRscreen20240118/rename_list.csv")
+rename_list$pathway <- str_to_title(rename_list$pathway)
+date = "260406"
+```
+
+# 1. Oncoprint for enrichments in whole PCAWG with Polysolver and LOHHLA results
+```{r}
+## Read MAF
+#load("/Users/wchen20/Desktop/PCAWG/consensus_snv_indel/maf/maf_pcawg_mut.RData")
+load("/Users/wchen20/Desktop/PCAWG/consensus_snv_indel/maf/pcawg_HLAupdateMSS.RData")
+
+#load("/Users/wchen20/Desktop/PCAWG/consensus_snv_indel/maf/maf_from_vcf/pcawg_HLAupdate_nonsyn.RData")
+#pcawg_MSS <- subsetMaf(maf = pcawg_MSS, 
+#                     mafObj = TRUE, 
+#                     tsb = sample_MSS)
+
+## Loop for cancer type
+cell_types <- c("Tcells", "MHCregulators", "NKcells", "Macrophages", "GammadeltaTcells")
+regulators <- c("neg", "pos")
+all_plots <- list()
+df <- list()
+
+for (cell_type in cell_types) {
+  
+  CRISPR_path <- "/Users/wchen20/Desktop/2026-02-16_Draft/Revision/R1Major2/005/"
+   
+  for (reg in regulators) {
+    
+    CRISPR_top10 <- read.csv(paste0(CRISPR_path, "/Summary/", cell_type, "_C5BP_", reg, "_list.csv"), header = T) %>% 
+      mutate(Pathway = ID, 
+             Pathway1 = Description) %>% 
+      dplyr::select(Pathway, Pathway1) 
+    
+    CRISPR_pathways <- fread(paste0(CRISPR_path, "/Summary/", cell_type, "_C5BP_", reg, "_allgenelist.csv")) %>% 
+      inner_join(CRISPR_top10, ., by = c("Pathway", "Pathway1")) %>%
+      dplyr::select(Gene, Pathway1)
+    
+    pathway_list <- unique(CRISPR_pathways$Pathway1)
+    
+    for (pathway in pathway_list) {
+      
+      CRISPR_gene <- CRISPR_pathways %>% filter(Pathway1 == !!pathway) %>% pull(Gene)
+      CRISPR_gene <- unique(CRISPR_gene)
+      
+      mut_path <- paste0(CRISPR_path, "/Summary/MutationsFreq/", date, "/")
+      dir.create(mut_path, recursive = T)
+      
+      pathway = str_to_title(pathway)
+      pathway <- gsub("/", "_", pathway)
+      title <- paste0(cell_type, "_", reg, "_", pathway)
+      
+      pdf(paste0(mut_path, "oncoPlot_", title, ".pdf"), width = 10, height = 4)
+      oncoplot(pcawg_MSS,
+               genes = CRISPR_gene,
+               titleText = title,
+               writeMatrix = T,
+               removeNonMutated = F)
+      dev.off()
+      
+      old_path <- paste0("/Users/wchen20/onco_matrix_", title, ".txt")
+      new_path <- paste0(mut_path, "/onco_matrix_", title, ".txt")
+      file.rename(from = old_path, to = new_path)
+      
+      mat_pathway <- fread(new_path) %>% mutate(across(where(is.numeric), ~na_if(.x, 0))) %>% dplyr::select(V1, any_of(sample_MSS))
+
+      mat1 <- mat_pathway %>% 
+             mutate(across(everything(), as.character))
+        
+      onco_prin <- mat1 %>% 
+          column_to_rownames("V1")
+      
+      missing_cols <- setdiff(sample_MSS, colnames(onco_prin))
+      onco_prin[missing_cols] <- NA_character_
+      onco_prin <- onco_prin[, sample_MSS]
+      
+      onco_prin[is.na(onco_prin)] <- "" 
+      onco_prin[onco_prin == "0"] <- "" 
+
+      pdf(paste0(mut_path, "/oncoPrint_NoHLA", title, ".pdf"), width = 6, height = 4)
+      ht1 <-  oncoPrint(onco_prin,
+                        alter_fun = alter_fun,
+                        alter_fun_is_vectorized = T,
+                        pct_gp = gpar(fontsize = 8), 
+                        col = col,
+                        show_pct = T,
+                        row_names_gp = gpar(fontsize = 8), 
+                        column_title = title,
+                        top_annotation = NULL,
+                        remove_empty_columns = TRUE,
+                        heatmap_legend_param = heatmap_legend_param,
+                        pct_side = "right", 
+                        row_names_side = "left")
+      draw(ht1, heatmap_legend_side = "bottom")
+      dev.off()
+      
+    }
+  }
+}
+```
+
+# 2. Combine results for each cell type
+```{r}
+rename_list <- fread("/Users/wchen20/Desktop/PCAWG/CRISPR/CRISPRscreen20240118/rename_list.csv")
+
+cell_types <- c("Tcells", "MHCregulators", "NKcells", "Macrophages", "GammadeltaTcells")
+regulators <- c("neg", "pos")
+plot_radar <- list()
+LOH_MSScols <- LOH_MSS %>% dplyr::select(aliquot_id, MSI_mut, histology_abbreviation)
+
+for (cell_type in cell_types) {
+  
+  CRISPR_path <- "/Users/wchen20/Desktop/2026-02-16_Draft/Revision/R1Major2/005/"
+  
+  mut_path <- paste0(CRISPR_path, "/Summary/MutationsFreq/", date, "/")
+  
+  file_path <- list.files(mut_path, pattern = paste0("onco_matrix_", cell_type, "_"), full.names = TRUE, recursive = TRUE)
+  Freq_list <- list()
+  
+  for (file in file_path) {
+    
+    filename <- basename(file)
+    filename <- sub("onco_matrix_", "", filename)
+    filename <- sub(".txt", "", filename)
+    
+    data <- fread(file) %>% 
+      column_to_rownames("V1") %>% 
+      mutate(across(where(is.numeric), ~na_if(.x, 0))) %>% t() %>% as.data.frame() %>%
+      filter(if_all(everything(), ~ !is.na(.))) %>% rownames_to_column("aliquot_id") %>% 
+      inner_join(LOH_MSScols, ., by = "aliquot_id") %>% distinct(aliquot_id, .keep_all = TRUE)
+    
+    mutation_counts <- data %>%
+      group_by(histology_abbreviation) %>%
+      summarise(across(-c(aliquot_id, MSI_mut), ~ sum(. != ""), .names = "count_{col}")) %>%
+      ungroup() %>%
+      pivot_longer(
+        cols = starts_with("count_"), 
+        names_to = "gene", 
+        values_to = "count",
+        names_prefix = "count_") %>%
+      group_by(gene) %>%
+      mutate(total_count = sum(count),
+             prevelance = total_count/nrow(LOH_MSS)) %>%
+      ungroup() %>% arrange(desc(total_count))
+    write_csv(mutation_counts, paste0(mut_path, "/GeneFreq_", filename, ".csv"))
+    
+    num_mut <- nrow(data)
+    num_MSS <- nrow(LOH_MSS)
+    
+    Freq <- as.data.frame(table(data$histology_abbreviation))
+    names(Freq) <- c("histology_abbreviation", "Freq_mut")
+    
+    Freq_all <-  as.data.frame(table(LOH_MSS$histology_abbreviation))
+    names(Freq_all) <- c("histology_abbreviation", "Sum")
+    
+    Freq_list[[filename]] <- left_join(Freq_all, Freq, by = "histology_abbreviation") %>% 
+      mutate(percent_mut = Freq_mut/Sum,  
+             percent_whole = num_mut/num_MSS,
+             Study = filename)
+  }
+  
+  Freq_all <- rbindlist(Freq_list) %>%
+    replace_na(list(Freq_mut = 0, percent_mut = 0)) %>% 
+    tidyr::separate(Study, into = c("cell_type", "regulator", "pathway"), extra = "merge", fill = "right") %>% 
+    left_join(., rename_list, by = "pathway") %>%
+    mutate(pathway_new = sapply(pathway_new, insert_newlines_every_five_words), pathway_new) %>%
+    arrange(cell_type, regulator, desc(percent_whole), desc(percent_mut), pathway)
+  write_csv(Freq_all, paste0(mut_path, cell_type, "_Freq_oncoMSS.csv"))
+
+}
+```
+
+# 3. Combine all
+```{r}
+CRISPR_path <- "/Users/wchen20/Desktop/2026-02-16_Draft/Revision/R1Major2/005/Summary/MutationsFreq/260406/"
+
+cell_types <- c("Tcells", "MHCregulators", "NKcells", "Macrophages", "GammadeltaTcells")
+regulators <- c("neg", "pos")
+
+CRISPR_path <- paste0("/Users/wchen20/Desktop/PCAWG/CRISPR/CRISPRscreen20240118/")
+file_path <- list.files(CRISPR_path, pattern = "_Freq_oncoMSS.csv", full.names = TRUE, recursive = TRUE)
+file_path <- grep(date, file_path, value = TRUE)
+
+Freq_all <- lapply(file_path, fread) %>% rbindlist()
+write.csv(Freq_all, file = paste0(CRISPR_path, "/oncoMSS_PCAWG.csv"), row.names = F)
+```

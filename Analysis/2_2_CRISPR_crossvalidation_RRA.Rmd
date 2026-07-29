@@ -1,0 +1,406 @@
+---
+title: "CRISPR_crossvalidation_RRA260220"
+author: "AJ"
+date: "2026-02-22"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# 0. Install and load the required packages
+```{r}
+rm(list = ls())
+
+suppressWarnings(library("data.table"))
+suppressWarnings(library("dplyr"))
+suppressWarnings(library("rmarkdown"))
+suppressWarnings(library("readr"))
+suppressWarnings(library("tidyr"))
+suppressWarnings(library("maftools"))
+suppressWarnings(library("stringr"))
+suppressWarnings(library("ggsci"))
+suppressWarnings(library("ggplot2"))
+suppressWarnings(library("biomaRt"))
+suppressWarnings(library("patchwork"))
+suppressWarnings(library("tibble"))
+suppressMessages(library("ggradar"))
+suppressMessages(library("broom"))
+suppressMessages(library("ggVennDiagram"))
+
+PCAWG_path <- "/Users/wchen20/Desktop/PCAWG/"
+source(paste0(PCAWG_path, "/code/source/basic.R"))
+source("/Users/wchen20/Desktop/PCAWG/code/source/EnrichedView_modified.R")
+source("/Users/wchen20/Desktop/PCAWG/code/source/TCGA_DEG250410.R")
+source("/Users/wchen20/Desktop/PCAWG/code/source/insert_newlines.R")
+source("/Users/wchen20/Desktop/PCAWG/code/source/GRITIC_summary.R")
+
+## Set Path
+CRISPR_path <- "/Users/wchen20/Desktop/PCAWG/CRISPR"
+
+## Rename the pathways
+rename_list <- fread("/Users/wchen20/Desktop/PCAWG/CRISPR/CRISPRscreen20240118/rename_list.csv")
+rename_list$pathway <- str_to_title(rename_list$pathway)
+```
+
+# 1. Running RRA for all studies
+```{r}
+## Set P value cutoff as 0.05
+path_RRA <- "/Users/wchen20/Desktop/PCAWG/CRISPR/CRISPRscreen20240118/RRA/fdr_005/"
+cut_off = 0.05
+
+for (cell_type in c("NKcells", "Tcells", "Macrophages", "GammadeltaTcells", "MHCregulators")) {
+  
+  if(cell_type == "MHCregulators") {
+    # Only include the studies with full MAGeCK output
+    path_CRISPR <- paste0("/Users/wchen20/Desktop/PCAWG/CRISPR/CRISPRscreen20240118/Uncertain/", cell_type)
+  } else {
+    path_CRISPR <- paste0("/Users/wchen20/Desktop/PCAWG/CRISPR/CRISPRscreen20240118/", cell_type)
+  }
+  
+  cripsr_list <- list.files(path_CRISPR, pattern = "*.gene_summary.txt", full.names = TRUE, recursive = TRUE)
+  cripsr_list <- grep("2_MAGeCK", cripsr_list, value = TRUE)
+  
+  ## Positive regulation
+  reg="pos"
+  sum_list <- lapply(cripsr_list, function(x) rank_extract(x, paste0(reg, "|rank")))
+  p_value <- lapply(cripsr_list, function(x) p_extract(x, paste0(reg, "|rank")))
+  r = rankMatrix(sum_list, full = TRUE)
+  
+  long_dt <- rbindlist(
+    lapply(seq_along(p_value), function(i) {
+      dt <- copy(p_value[[i]])
+      setnames(dt, "P_value", "pval")
+      dt[, dataset := paste0("ds", i)]
+      dt
+    })
+  )
+  
+  long_dt[, HumanGene := as.character(HumanGene)]
+  result <- long_dt[, .(hommel_p = combine_hommel(na.omit(pval))), by = HumanGene]
+  
+  normed <- lapply(seq_along(sum_list), function(i) {
+    dt <- normalize_list(sum_list[[i]])
+    dt[, Screen := paste0("S", i)]
+    dt
+  })
+  
+  score_dt <- rbindlist(normed)
+  score_dt[, HumanGene := as.character(HumanGene)]
+  
+  gene_scores <- score_dt[, .(
+    mean_score = mean(Rnorm, na.rm = TRUE),
+    sd_score   = sd(Rnorm, na.rm = TRUE),
+    n_screens  = .N
+  ), by = HumanGene]
+  
+  pos <- aggregateRanks(rmat = r, method = "RRA") %>%
+    mutate(Score = Score) %>%
+    arrange(Score) %>%
+    mutate(Rank = row_number(),
+           HumanGene = Name) %>% 
+    left_join(., result, by = "HumanGene") %>%
+    mutate(fdr = p.adjust(hommel_p),
+           HumanGene = Name) %>% 
+    inner_join(gene_scores, by = "HumanGene")
+  
+  colnames(pos) <- ifelse(
+    colnames(pos) == "HumanGene",
+    "HumanGene",
+    paste0(colnames(pos), "_", reg)
+  )
+  
+  ## Negtiave regulation
+  reg="neg"
+  sum_list <- lapply(cripsr_list, function(x) rank_extract(x, paste0(reg, "|rank")))
+  p_value <- lapply(cripsr_list, function(x) p_extract(x, paste0(reg, "|rank")))
+  
+  long_dt <- rbindlist(
+    lapply(seq_along(p_value), function(i) {
+      dt <- copy(p_value[[i]])
+      setnames(dt, "P_value", "pval")
+      dt[, dataset := paste0("ds", i)]
+      dt
+    })
+  )
+  
+  long_dt[, HumanGene := as.character(HumanGene)]
+  result <- long_dt[, .(hommel_p = combine_hommel(na.omit(pval))), by = HumanGene]
+  
+  normed <- lapply(seq_along(sum_list), function(i) {
+    dt <- normalize_list(sum_list[[i]])
+    dt[, Screen := paste0("S", i)]
+    dt
+  })
+  
+  score_dt <- rbindlist(normed)
+  score_dt[, HumanGene := as.character(HumanGene)]
+  
+  gene_scores <- score_dt[, .(
+    mean_score = mean(Rnorm, na.rm = TRUE),
+    sd_score   = sd(Rnorm, na.rm = TRUE),
+    n_screens  = .N
+  ), by = HumanGene]
+  
+  r = rankMatrix(sum_list, full = TRUE)
+  neg <- aggregateRanks(rmat = r, method = "RRA") %>%
+    mutate(Score = Score) %>%
+    arrange(Score) %>%
+    mutate(Rank = row_number(),
+           HumanGene = Name) %>% 
+    left_join(., result, by = "HumanGene") %>%
+    mutate(fdr = p.adjust(hommel_p),
+           HumanGene = Name) %>% 
+    inner_join(gene_scores, by = "HumanGene")
+  
+  colnames(neg) <- ifelse(
+    colnames(neg) == "HumanGene",
+    "HumanGene",
+    paste0(colnames(neg), "_", reg)
+  )
+  
+  all <- inner_join(pos, neg, by = "HumanGene") %>%
+    mutate(
+      Direction = case_when(
+        Rank_pos < Rank_neg & hommel_p_pos < cut_off & mean_score_pos > 0 ~ "Pos",
+        Rank_neg < Rank_pos & hommel_p_neg < cut_off & mean_score_neg > 0 ~ "Neg",
+        TRUE ~ "NS"
+      ),
+      cell_type = cell_type,
+      Score = case_when(
+        Direction == "Pos" ~ mean_score_pos,
+        Direction == "Neg" ~ -mean_score_neg,
+        Direction == "NS"  ~ rowMeans(cbind(mean_score_pos, mean_score_neg), na.rm = TRUE),
+        TRUE ~ 0
+      ),
+      P_value = case_when(
+        Direction == "Pos" ~ hommel_p_pos,
+        Direction == "Neg" ~ hommel_p_neg,
+        Direction == "NS"  ~ cut_off,
+        TRUE ~ 1
+      )
+    )
+  
+  dir.create(paste0(path_RRA, "/RRA_", cell_type), recursive = TRUE)
+  
+  write.csv(all, file = paste0(path_RRA, "/RRA_", cell_type, ".csv"), row.names = F)
+  
+}
+
+cripsr_list <- list.files(path_RRA, pattern = "RRA_*", full.names = TRUE, recursive = TRUE)
+cripsr_list <- grep("combined_fdr", cripsr_list, value = TRUE, invert = TRUE)
+
+## Summarize the results
+RRA_all <- lapply(cripsr_list, fread) %>%
+  rbindlist() %>%
+  filter(HumanGene != "NULL") %>% 
+  mutate(Category = case_when(cell_type == "Tcells" ~ "T cell",
+                              cell_type == "MHCregulators" ~ "MHC-I regulation",
+                              cell_type == "NKcells" ~ "NK cell",
+                              cell_type == "Macrophages" ~ "Macrophage",
+                              cell_type == "GammadeltaTcells" ~ "gdT cell",
+                              TRUE ~ NA),
+         Regulation = case_when(
+           P_value < 0.001 & Direction != "NS" ~ paste0(Category, "***"),
+           P_value < 0.01 & Direction != "NS" ~ paste0(Category, "**"),
+           P_value < cut_off & Direction != "NS" ~ paste0(Category, "*"),
+           TRUE ~ Category)) 
+write.csv(RRA_all, file = paste0(path_RRA, "/RRAcombined_fdr.csv"), row.names = F)
+table(RRA_all$Direction, RRA_all$cell_type)
+```
+
+# 2. Perform GSEA by MAGeckFlute
+```{r}
+RRA_all <- fread(paste0(path_RRA, "/RRAcombined_fdr.csv"))
+
+for (cell_type in c("NKcells", "Tcells", "Macrophages", "GammadeltaTcells", "MHCregulators")) {
+  
+  pos_sig <- RRA_all %>% filter(cell_type == !!cell_type, Direction == "Pos")
+  pos_genelist = pos_sig$Score
+  names(pos_genelist) = pos_sig$HumanGene
+  pos_genelist = sort(pos_genelist, decreasing = TRUE)
+  
+  pos_enrich = EnrichAnalyzer(geneList = pos_genelist, 
+                              method = "ORT", 
+                              type = "Pathway+C5_BP",
+                              limit = c(5, 500),
+                              pvalueCutoff = 1,
+                              organism = "hsa")
+  
+  pos_en <- pos_enrich@result
+  write.csv(pos_en, file = paste0(path_RRA, cell_type, "_PathwayC5BPpos_all.csv"), row.names = F, quote = TRUE)
+  
+  pos_en_sig <- subset(pos_en, `p.adjust` < 0.1)
+  pos_en_sig$GeneRatio <- as.character(pos_en_sig$GeneRatio)
+  write.csv(pos_en_sig, file = paste0(path_RRA, cell_type, "_PathwayC5BPpos_sig.csv"), row.names = F, quote = TRUE)
+  
+  top10_pos <- EnrichedView_modified(pos_en_sig, top = 10, bottom = 0, mode = 1, title = cell_type)
+  ggsave(file = paste0(path_RRA, cell_type, "_PathwayC5BPpos.pdf"), top10_pos, width = 6, height = 7, dpi = 300)
+  
+  neg_sig <- RRA_all %>% filter(cell_type == !!cell_type, Direction == "Neg")
+  neg_genelist = neg_sig$Score
+  names(neg_genelist) = neg_sig$HumanGene
+  neg_genelist = sort(neg_genelist, decreasing = TRUE)
+  
+  neg_enrich = EnrichAnalyzer(geneList = neg_genelist, 
+                              method = "ORT", 
+                              type = "Pathway+C5_BP",
+                              limit = c(5, 500),
+                              pvalueCutoff = 1,
+                              organism = "hsa")
+  
+  neg_en <- neg_enrich@result
+  write.csv(neg_en, file = paste0(path_RRA, cell_type, "_PathwayC5BPneg_all.csv"), row.names = F, quote = TRUE)
+  
+  neg_en_sig <- subset(neg_en, `p.adjust` < 0.1)
+  neg_en_sig$GeneRatio <- as.character(neg_en_sig$GeneRatio)
+  write.csv(neg_en_sig, file = paste0(path_RRA, cell_type, "_PathwayC5BPneg_sig.csv"), row.names = F, quote = TRUE)
+  
+  top10_neg <- EnrichedView_modified(neg_en_sig, top = 0, bottom = 10, mode = 1, title = cell_type)
+  ggsave(file = paste0(path_RRA, cell_type, "_PathwayC5BPneg.pdf"), top10_neg, width = 6, height = 7, dpi = 300)
+  
+}
+```
+
+# 3. Summary for CRIPSR studies
+```{r, eval = FALSE}
+cell_types <- c("Tcells", "MHCregulators", "NKcells", "Macrophages", "GammadeltaTcells")
+regulators <- c("pos", "neg")
+cutoff = 0.05
+
+for (i in c(50, 100, 200)) {
+  for (cell_type in cell_types) {
+   
+   CRISPR_path <- paste0("/Users/wchen20/Desktop/PCAWG/CRISPR/CRISPRscreen20240118/Crossvalidation/", cell_type)
+   
+   if (cutoff == 0.05) {
+     cutoff_suff = "005"
+   } else if (cutoff == 0.1) {
+     cutoff_suff = "01"
+   } else if (cutoff == 0.01) {
+     cutoff_suff = "001"}
+   
+   if (!dir.exists(paste0(CRISPR_path, "/Summary/", cutoff_suff, "/"))) {
+     dir.create(paste0(CRISPR_path, "/Summary/", cutoff_suff, "/"))
+   }
+   
+   ## Combine all the pathways for each 
+   for (reg in regulators) {
+    
+    file_paths <- list.files(CRISPR_path, pattern = paste0("_PathwayGOBP_", reg, i, ".csv"), full.names = TRUE, recursive = TRUE)
+    study_total <- length(unique(file_paths))
+    
+    all_data <- lapply(file_paths, function(path) {
+      study <- strsplit(path, "/")[[1]]
+      study <- paste(study[-(1:7)], collapse="/")
+      study <- gsub("/", "_", study)
+      study <- sub("3_GSEA_", "", study)
+      study <- sub("_PathwayGOBP_", "", study)
+      study <- sub("\\.csv$", "", study)
+
+      data <- fread(path) %>% mutate(BG = sub("/.*", "", BgRatio),
+                                     Study = study) %>% 
+                              filter(`p.adjust` < cutoff)
+      return(data)
+      
+     }) %>% rbindlist(fill = TRUE)
+     
+    ## Calculate the frequency of each pathway
+    enrich_freq <- all_data %>%
+                    group_by(ID) %>%
+                    dplyr::summarise(Freq = n()) %>% 
+                    left_join(all_data, ., by = "ID") %>% 
+      mutate(total_study = study_total) %>% 
+      arrange(desc(Freq), ID)
+     write.csv(enrich_freq, file =  paste0(CRISPR_path, "/Summary/", cutoff_suff, "/", cell_type, "_C5BP_", reg, i, ".csv"), row.names = F)
+     
+     ## Obtain the common genes or all genes
+     combined <- all_data %>%
+     group_by(ID) %>%
+     dplyr::summarize(combined_proteins = paste(unique(geneName), collapse = "/")) %>%
+     mutate(combined_proteins = sapply(strsplit(combined_proteins, "/"), function(x) paste(unique(x), collapse = ",")))
+
+     overlapped <- all_data %>%
+     group_by(ID) %>%
+     dplyr::summarise(common_proteins_list = list(Reduce(intersect, strsplit(geneName, split="/"))), .groups = "drop") %>%
+     mutate(common_proteins = sapply(common_proteins_list, paste, collapse = ",")) %>% 
+     dplyr::select(-common_proteins_list)
+     
+     id_com <- enrich_freq %>% distinct(ID,.keep_all = T) %>% 
+       dplyr::select(ID,	Description, Study, Freq, BG) %>% 
+       left_join(., combined, by = "ID") %>% 
+       left_join(., overlapped, by = "ID") %>% 
+       dplyr::select(ID, Description, BG, combined_proteins, common_proteins, Freq) %>% 
+      arrange(desc(Freq), ID)
+     write.csv(id_com, file =  paste0(CRISPR_path, "/Summary/", cutoff_suff, "/", cell_type, "_C5BP_", reg, i, "_combined.csv"), row.names = F)
+      
+     ## Wide table for all genes
+     id_poss_long <- id_com %>%
+                arrange(desc(Freq), ID) %>%
+                subset(Freq > 1) %>%
+                head(10) %>%
+                separate_rows(combined_proteins, sep = ",") %>%
+                left_join(., id_com, by = "ID") %>%
+                dplyr::rename(Pathway = ID, Pathway1 = `Description.x`, Gene = `combined_proteins.x`, Freq = `Freq.x`) %>%
+                dplyr::select(Pathway, Pathway1, Gene, Freq) %>% 
+      arrange(desc(Freq), Pathway)
+      write.csv(id_poss_long, file = paste0(CRISPR_path, "/Summary/", cutoff_suff, "/", cell_type, "_C5BP_", reg, i, "genelist.csv"), row.names = F)
+      
+      ## Wide table for all genes
+      id_poss_all <- id_com %>% 
+                arrange(desc(Freq), ID) %>%
+                separate_rows(combined_proteins, sep = ",") %>%
+                left_join(., id_com, by = "ID") %>%
+                dplyr::rename(Pathway = ID, Pathway1 = `Description.x`, Gene = `combined_proteins.x`, Freq = `Freq.x`) %>%
+                dplyr::select(Pathway, Pathway1, Gene, Freq) %>% 
+      arrange(desc(Freq), Pathway)
+      write.csv(id_poss_all, file = paste0(CRISPR_path, "/Summary/", cutoff_suff, "/", cell_type, "_C5BP_", reg, i, "_allgenelist.csv"), row.names = F)
+      
+      ## Generate the top gene matrix
+      file_paths <- list.files(CRISPR_path, pattern = paste0("*", i, ".csv"), full.names = TRUE, recursive = TRUE)
+      file_paths <- file_paths[grepl(reg, file_paths)]
+      file_paths <- file_paths[grepl("3_GSEA", file_paths)]
+      file_paths <- file_paths[!grepl("PathwayGOBP", file_paths)]
+      
+      gene_list <- list()
+      
+      for (file in file_paths) {
+      
+      study <- sub(paste0(".*/", cell_type, "/"), "", file)
+      study <- sub("/3_GSEA/", "_", study)
+      study <- sub("/", "_", file)
+      
+      data <- fread(file)
+      gene_list[[study]] <- data %>% dplyr::select(HumanGene)
+      
+      }
+    
+    gene_all <- rbindlist(gene_list) %>% distinct(HumanGene)
+    
+    gene_df <- list()
+    
+    for (file in file_paths) {
+      
+      study <-  sub(paste0(".*/", cell_type, "/"), "", file)
+      study <- sub("/3_GSEA/", "_", study)
+      study <- sub(paste0("_pos", i, ".csv"), "", study)
+      study <- sub(paste0("_neg" ,i, ".csv"), "", study)
+      
+      data <- fread(file)
+      data[, (study) := 1]
+      gene_df[[study]] <- data %>% dplyr::select(HumanGene, study) 
+      gene_all <- left_join(gene_all, gene_df[[study]], by = "HumanGene")
+      
+    }
+    
+    gene_all <- gene_all %>%
+      mutate(across(2:ncol(.), ~replace_na(.x, 0))) %>%
+      mutate(Total = rowSums(dplyr::select(., 2:ncol(.)))) %>% arrange(desc(Total))
+    
+    write.csv(gene_all, paste0(CRISPR_path, "/Summary/", cutoff_suff, "/", cell_type,  "_", reg, i, "GeneMatrix.csv"), row.names = FALSE)
+      
+    }
+  }
+}
+```

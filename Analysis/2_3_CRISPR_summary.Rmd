@@ -1,0 +1,292 @@
+---
+title: "R1Major2_CRISPR_summary260220"
+author: "AJ"
+date: "2026-07-06"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# 0. Library packages
+```{r}
+rm(list = ls())
+
+suppressWarnings(library("data.table"))
+suppressWarnings(library("dplyr"))
+suppressWarnings(library("rmarkdown"))
+suppressWarnings(library("readr"))
+suppressWarnings(library("tidyr"))
+suppressWarnings(library("maftools"))
+suppressWarnings(library("stringr"))
+suppressWarnings(library("ggsci"))
+suppressWarnings(library("ggplot2"))
+suppressWarnings(library("biomaRt"))
+suppressWarnings(library("patchwork"))
+suppressWarnings(library("tibble"))
+suppressMessages(library("ggradar"))
+suppressMessages(library("broom"))
+suppressMessages(library("ggVennDiagram"))
+
+PCAWG_path <- "/Users/wchen20/Desktop/PCAWG/"
+source(paste0(PCAWG_path, "/code/source/basic.R"))
+source("/Users/wchen20/Desktop/PCAWG/code/source/EnrichedView_modified.R")
+source("/Users/wchen20/Desktop/PCAWG/code/source/TCGA_DEG250410.R")
+source("/Users/wchen20/Desktop/PCAWG/code/source/insert_newlines.R")
+source("/Users/wchen20/Desktop/PCAWG/code/source/GRITIC_summary.R")
+
+## Set Path
+CRISPR_path <- "/Users/wchen20/Desktop/PCAWG/CRISPR"
+
+## Rename the pathways
+rename_list <- fread("/Users/wchen20/Desktop/PCAWG/CRISPR/CRISPRscreen20240118/rename_list.csv")
+rename_list$pathway <- str_to_title(rename_list$pathway)
+```
+
+# 1. Consensus results
+```{r}
+cell_types <- c("Tcells", "MHCregulators", "NKcells", "Macrophages", "GammadeltaTcells")
+regulators <- c("pos", "neg")
+
+cut_off = 0.05
+
+plot_venn <- list()
+
+for (cell_type in cell_types) {
+  
+  CRISPR_path <- paste0("/Users/wchen20/Desktop/PCAWG/CRISPR/CRISPRscreen20240118/Crossvalidation/", cell_type)
+  path_save <- "/Users/wchen20/Desktop/2026-02-16_Draft/Revision/R1Major2/"
+  
+  if (cut_off == 0.05) {
+    cut_suffix = "005"
+    RRA_path <- "/Users/wchen20/Desktop/PCAWG/CRISPR/CRISPRscreen20240118/RRA/fdr_005/"
+  } else if (cut_off == 0.1) {
+    cut_suffix = "01"
+    RRA_path <- "/Users/wchen20/Desktop/PCAWG/CRISPR/CRISPRscreen20240118/RRA/fdr_01_combined_fixed/"
+  } else if (cut_off == 0.01) {
+    cut_suffix = "001"
+    RRA_path <- "/Users/wchen20/Desktop/PCAWG/CRISPR/CRISPRscreen20240118/RRA/fdr_001/"
+  }
+  
+  dir.create(paste0("/Users/wchen20/Desktop/2026-02-16_Draft/Revision/R1Major2/", cut_suffix, "/"))
+  
+  for (reg in regulators) {
+    
+    if (cell_type %in% c("Tcells")) {
+        num = 5
+      } else if (cell_type %in% c("MHCregulators"))  {
+        num = 1
+      } else {
+        num = 0
+      }
+    
+      if (cell_type == "Tcells") {
+        cell_type_title = "T-cell-killing"
+      } else if (cell_type == "NKcells")  {
+        cell_type_title = "NK-cell-killing"
+      } else if (cell_type == "GammadeltaTcells")  {
+        cell_type_title = "gdT-cell-killing"
+      } else if (cell_type == "Macrophages")  {
+        cell_type_title = "Macrophage-killing"
+      } else if (cell_type == "MHCregulators") {
+        cell_type_title = "MHC-I Expression"
+      }
+    
+      if (reg == "pos" & cell_type != "MHCregulators") {
+        reg_title = "Sensitive to "
+      } else if (reg == "neg" & cell_type != "MHCregulators") {
+        reg_title = "Resistant to "
+      } else if (reg == "pos" & cell_type == "MHCregulators") {
+        reg_title = "Postive Regulation of "
+      } else if (reg == "neg" & cell_type == "MHCregulators") {
+        reg_title = "Negative Regulation of "
+      }
+    
+    title = paste0(reg_title, cell_type_title)
+    
+    id_com <- list()
+    
+    for (i in c(50, 100, 200)) {
+    
+    file_paths <- list.files(CRISPR_path, pattern = paste0("_PathwayGOBP_", reg, i, ".csv"), full.names = TRUE, recursive = TRUE)
+    study_total <- length(unique(file_paths))
+    
+    all_data <- lapply(file_paths, function(path) {
+      study <- strsplit(path, "/")[[1]]
+      study <- paste(study[-(1:7)], collapse="/")
+      study <- gsub("/", "_", study)
+      study <- sub("3_GSEA_", "", study)
+      study <- sub("_PathwayGOBP_", "", study)
+      study <- sub("\\.csv$", "", study)
+      
+      data <- fread(path) %>% mutate(BG = sub("/.*", "", BgRatio),
+                                     Study = study) %>% filter(p.adjust < cut_off)
+      return(data)
+      
+    }) %>% rbindlist(fill = TRUE)
+    
+    enrich_freq <- all_data %>%
+      group_by(ID) %>%
+      dplyr::summarise(Freq = n()) %>% 
+      left_join(all_data, ., by = "ID") %>% 
+      mutate(total_study = study_total) %>% 
+      arrange(desc(Freq), ID)
+  
+    combined <- all_data %>%
+      group_by(ID) %>%
+      dplyr::summarize(combined_proteins = paste(unique(geneName), collapse = "/")) %>%
+      mutate(combined_proteins = sapply(strsplit(combined_proteins, "/"), function(x) paste(unique(x), collapse = ",")))
+    
+    overlapped <- all_data %>%
+      group_by(ID) %>%
+      dplyr::summarise(common_proteins_list = list(Reduce(intersect, strsplit(geneName, split="/"))), .groups = "drop") %>%
+      mutate(common_proteins = sapply(common_proteins_list, paste, collapse = ",")) %>% 
+      dplyr::select(-common_proteins_list)
+    
+    id_com[[i]] <- enrich_freq %>% distinct(ID,.keep_all = T) %>% 
+      dplyr::select(ID,	Description, Study, Freq, BG) %>% 
+      left_join(., combined, by = "ID") %>% 
+      left_join(., overlapped, by = "ID") %>% 
+      dplyr::select(ID, Description, combined_proteins, common_proteins, Freq) %>% 
+      arrange(desc(Freq), ID) %>% filter(Freq > num)
+    write.csv(id_com, file =  paste0(CRISPR_path, "/Summary/", cell_type, "_C5BP_", reg, i, "_combined.csv"), row.names = F)
+    
+    }
+  
+  df <- fread(paste0(RRA_path, "/", cell_type, "_PathwayC5BP", reg, "_sig.csv")) %>% filter(p.adjust < cut_off)
+  
+  combined <- inner_join(df, id_com[[50]], by = c("ID", "Description")) %>%
+    inner_join(id_com[[100]], by = c("ID", "Description")) %>%
+    inner_join(id_com[[200]], df, by = c("ID", "Description")) %>% 
+    mutate(row_id = row_number(),
+           score = `Freq.x` + `Freq.y` + Freq) %>% arrange(desc(score), `p.adjust`)
+  
+  dt <- as.data.table(combined) %>%
+    mutate(
+    id = row_number(),
+    gene_list = strsplit(geneName, "/"))
+  
+  pairs <- CJ(i = dt$id, j = dt$id)[i != j]
+  
+  pairs[, overlap := mapply(function(a,b){
+  
+  g1 <- dt$gene_list[[a]]
+  g2 <- dt$gene_list[[b]]
+  
+  length(intersect(g1,g2)) / length(g1)
+
+  }, i, j)]
+  
+  pairs <- pairs[overlap >= 0.7]
+  
+  pair_map <- rbind(
+  data.table(
+    id = pairs$i,
+    partner = dt$Description[pairs$j]
+  ),
+  data.table(
+    id = pairs$j,
+    partner = dt$Description[pairs$i]
+  )
+  )
+  
+  pair_map <- pair_map[, .(
+  paired_pathways = paste(partner, collapse = "; "),
+  freq_similarity = .N), by = id]
+  
+  dt_final <- dt %>%
+  left_join(pair_map, by = "id") %>%
+  mutate(
+    freq_similarity = ifelse(is.na(freq_similarity), 0, freq_similarity),
+    paired_pathways = ifelse(is.na(paired_pathways), "", paired_pathways)
+  ) %>% 
+    select(-gene_list, -id,-row_id) %>%
+    as.data.frame()
+  write.csv(dt_final, file = paste0(path_save, "/", cut_suffix, "/Summary/", cell_type, "_C5BP_", reg, "_consensusRRA.csv"), row.names = F)
+  
+  dt_final_list <- dt_final %>% 
+  separate_rows(geneName, sep = "/") %>%
+  dplyr::mutate(Pathway = ID, Pathway1 = Description, Gene = geneName) %>% 
+  dplyr::select(Pathway, Pathway1, Gene)
+  write.csv(dt_final_list, file = paste0(path_save, "/", cut_suffix, "/Summary/", cell_type, "_C5BP_", reg, "_allgenelist.csv"), row.names = F)
+  
+  venn_list <- list(
+  RRA      = paste(df$ID, df$Description),
+  Top50   = paste(id_com[[50]]$ID, id_com[[50]]$Description),
+  Top100  = paste(id_com[[100]]$ID, id_com[[100]]$Description),
+  Top200  = paste(id_com[[200]]$ID, id_com[[200]]$Description)
+  )
+
+  plot_venn[[paste0(cell_type, "_", reg)]] <- ggVennDiagram(
+  venn_list,
+  label_alpha = 0,
+  set_color = c("#E64B35FF", "#4DBBD5FF", "#00A087FF", "#3C5488FF"),
+  edge_size = 1,
+  set_size = 4,
+  label_size = 3.5) +
+  scale_fill_continuous(low = "#F0F0F0", high = "#F0F0F0") +
+  guides(fill = "none") +
+  theme_void() +
+  labs(title = title) +
+  coord_sf(clip = "off", xlim = c(-0.1, 1.1)) +  
+    theme(
+    plot.title = element_text(
+      hjust = 0.5,   # center title
+      vjust = 0,
+      size = 14,
+      margin = margin(b = 15)
+    )
+  )
+  
+  ggsave(filename = paste0(path_save, "/", cut_suffix, "/Summary/", cell_type, "_C5BP_", reg, "_consensusRRA.pdf"), plot = plot_venn[[paste0(cell_type, "_", reg)]], width = 5, height = 3, units = "in")
+  
+  }
+  plot_venn_sub <- plot_venn[[paste0(cell_type, "_pos")]] + plot_venn[[paste0(cell_type, "_neg")]]
+  ggsave(filename = paste0(path_save, "/", cut_suffix, "/Summary/", cell_type, "_consensusRRA.pdf"), plot = plot_venn_sub, width = 10, height = 3.5, units = "in")
+
+}
+```
+
+# 2. Combined all
+## RRA list
+```{r}
+path_validate <- "/Users/wchen20/Desktop/2026-02-16_Draft/Revision/R1Major2/"
+file_paths <- list.files(path_validate, pattern = "*RRA_list.csv", full.names = TRUE, recursive = TRUE)
+
+read_summ <- function(file) {
+  
+  data <- fread(file) %>% mutate(file_name = basename(file))
+  return(data)  
+}
+
+list_all <- lapply(file_paths, read_summ) %>% rbindlist() %>% 
+  mutate(pathway = str_to_title(Description),
+         Category = sub("_.*", "", file_name),
+         Regulation = ifelse(grepl("_C5BP_neg_consensusRRA_list.csv",file_name),
+                             "Negative Regulation", "Positive Regulation")) %>%
+  inner_join(rename_list, ., by = "pathway") %>% arrange(desc(file_name))
+
+write.csv(list_all, "/Users/wchen20/Desktop/2026-02-16_Draft/Revision/R1Major2/RRA_list_all.csv", row.names = F)
+```
+
+## Combine final lists
+```{r}
+path_validate <- "/Users/wchen20/Desktop/2026-02-16_Draft/Revision/R1Major2/005/Summary/"
+file_paths <- list.files(path_validate, pattern = "*_list.csv", full.names = TRUE, recursive = TRUE)
+
+read_summ <- function(file) {
+  
+  data <- fread(file) %>% mutate(file_name = basename(file))
+  return(data)  
+}
+
+list_all <- lapply(file_paths, read_summ) %>% rbindlist() %>% 
+  mutate(pathway = str_to_title(Description),
+         Category = sub("_.*", "", file_name),
+         Regulation = ifelse(grepl("neg",file_name),
+                             "Negative Regulation", "Positive Regulation")) %>%
+  inner_join(rename_list, ., by = "pathway") %>% arrange(desc(file_name))
+
+write.csv(list_all, paste0(path_validate, "/Pathway_all.csv"), row.names = F)
+```

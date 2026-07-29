@@ -1,0 +1,905 @@
+---
+title: "R1Major5_uncertainty_MedianTiming_250samplingFinal.Rmd"
+author: "AJ"
+date: "2026-06-23"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Load packacges
+```{r}
+rm(list = ls())
+
+suppressWarnings(library("stringr"))
+suppressWarnings(library("dplyr"))
+suppressWarnings(library("patchwork"))
+suppressWarnings(library("ggpubr"))
+suppressWarnings(library("ggridges"))
+suppressWarnings(library("truncnorm"))
+suppressWarnings(library("tidyr"))
+suppressWarnings(library("data.table"))
+suppressWarnings(library("readr"))
+suppressWarnings(library("ggplot2"))
+suppressWarnings(library("ggrepel"))
+suppressWarnings(library("tibble"))
+suppressWarnings(library("textshape"))
+suppressWarnings(library("matrixStats"))
+suppressWarnings(library("bayestestR"))
+suppressWarnings(library("BradleyTerry2"))
+suppressWarnings(library("purrr"))
+suppressWarnings(library("tidyr"))
+suppressWarnings(library("purrr"))
+suppressWarnings(library("cowplot"))
+suppressWarnings(library("ggsci"))
+suppressWarnings(library("randomcoloR"))
+suppressWarnings(library("PlackettLuce"))
+
+## Path
+PCAWG_path <- "/rsrch6/scratch/hema_bio-Malignan/wchen20/PCAWG"
+PCAWG_path <- "/Users/wchen20/Desktop/PCAWG"
+gritic_path <- paste0(PCAWG_path, "/MHC_evolution/GRITIC/output")
+
+source("/Users/wchen20/Desktop/PCAWG/code/source/basic.R")
+source("/Users/wchen20/Desktop/PCAWG/code/source/insert_newlines.R")
+source("/Users/wchen20/Desktop/PCAWG/code/source/plot_segTiming.R")
+
+## Timing of WGD
+wgd_median <- fread("/Users/wchen20/Desktop/PCAWG/MHC_evolution/GRITIC/output/wgd_median.csv") %>% 
+  dplyr::select(wgd_mediantiming, sample_id) %>% 
+  filter(sample_id %in% LOH_MSI$aliquot_id)
+
+sample_wgd <- wgd_median %>% pull(sample_id)
+
+## Save Path
+#gritic_path = "/Users/wchen20/Desktop/PCAWG/MHC_evolution/GRITIC/output/250717/summary250717/"
+#path_timeline = "/Users/wchen20/Desktop/PCAWG/MHC_evolution/GRITIC/output/250717/summary250717/timeline/"
+
+sample_HLA <- fread("/Users/wchen20/Desktop/PCAWG/MHC_evolution/GRITIC/output/250717/summary250717/sample_HLA.csv") %>% pull(sample_id)
+```
+
+# 0. Set path
+```{r}
+path_gritic = "/Users/wchen20/Desktop/PCAWG/MHC_evolution/GRITIC/output/allmutation/mafgritic_nonsyn/"
+path_gritic_pathway = "/Users/wchen20/Desktop/PCAWG/MHC_evolution/GRITIC/output/allmutation/mafgritic_nonsyn/pathway/min_drivermutation_250/"
+
+path_HLALOH = "/Users/wchen20/Desktop/2026-02-16_Draft/Final_Results/1_APM/2_HLALOH/"
+```
+
+# 1. Timing for nonsyn
+```{r}
+nonsyn_filter_nonPloy <- fread(paste0(path_gritic, "/GRITIC_success.csv"))
+sample_sucess <- unique(nonsyn_filter_nonPloy$sample_id)
+
+mafgritic_files <- list.files(path = path_gritic, pattern = "mafgritic_nonsyn_*", recursive = FALSE, full.names = TRUE)
+data_timing_driver <- list()
+
+for (file in mafgritic_files) {
+  
+  type = basename(file)
+  type = sub("mafgritic_nonsyn_", "", type)
+  type = sub(".csv", "", type)
+  
+  data_timing_driver[[type]] <- fread(file) %>% 
+    filter(Variant_Classification %in% non_syn)
+  
+}
+
+data_timing_driver_all <- rbindlist(data_timing_driver) %>% 
+  filter(Tumor_Sample_Barcode %in% sample_MSS) %>%
+  filter(Tumor_Sample_Barcode %in% sample_sucess) %>%
+  mutate(median_value = rowMedians(as.matrix(dplyr::select(., all_of(column_names))), na.rm = TRUE),
+         early_ratio = rowMeans(dplyr::select(., all_of(column_names)) < 0.5, na.rm = TRUE)) 
+
+write.csv(data_timing_driver_all, file = paste0(path_gritic_pathway, "/nonsyn_filter_diff.csv"), row.names = F)
+
+sample_all <- unique(data_timing_driver_all$Tumor_Sample_Barcode)
+missing_ids <- setdiff(sample_all, sample_sucess)
+
+check <- LOH_MSI %>% filter(aliquot_id %in% missing_ids)
+```
+
+# 2. Timing for driver genes
+```{r}
+drivergene_cancer <- driver_list %>% pull(Gene)
+
+data_timing_driver_all <- fread(paste0(path_gritic_pathway, "/nonsyn_filter_diff.csv")) %>% 
+  filter(Hugo_Symbol %in% drivergene_cancer) %>%
+  mutate(sample_id = Tumor_Sample_Barcode,
+         pathway = Hugo_Symbol,
+         event = Hugo_Symbol,
+         pathway_new = Hugo_Symbol) %>%
+  dplyr::select(c("sample_id", "Hugo_Symbol", "event", everything()))
+write.csv(data_timing_driver_all, file = paste0(path_gritic_pathway, "/diff_driver.csv"), row.names = F)
+
+length(unique(data_timing_driver_all$sample_id))
+kept_cols <- names(data_timing_driver_all)
+
+data_timing_driver_all <- fread(paste0(path_gritic_pathway, "/nonsyn_filter_diff.csv")) %>% 
+  filter(Hugo_Symbol %in% drivergene_cancer) %>%
+  group_by(Tumor_Sample_Barcode, Hugo_Symbol) %>%
+  slice_min(median_value, n = 1, with_ties = FALSE) %>%
+  mutate(sample_id = Tumor_Sample_Barcode,
+         pathway = Hugo_Symbol,
+         event = Hugo_Symbol,
+         pathway_new = Hugo_Symbol) %>%
+  dplyr::select(c("sample_id", "Hugo_Symbol", "event", everything()))
+write.csv(data_timing_driver_all, file = paste0(path_gritic_pathway, "/diff_driver.csv"), row.names = F)
+```
+
+# 3. Timing for driver mutations
+```{r}
+mafgritic_files <- list.files(path = path_gritic, pattern = "mafgritic_drivermutation_*", recursive = FALSE, full.names = TRUE)
+data_timing_driver <- list()
+
+for (file in mafgritic_files) {
+  
+  type = basename(file)
+  type = sub("mafgritic_drivermutation_", "", type)
+  type = sub(".csv", "", type)
+  
+  data_timing_driver[[type]] <- fread(file)
+  
+}
+
+data_timing_drivermutations <- rbindlist(data_timing_driver) %>% 
+    filter(Tumor_Sample_Barcode %in% sample_MSS) %>%
+    filter(Tumor_Sample_Barcode %in% sample_sucess) %>%
+    mutate(sample_id = Tumor_Sample_Barcode,
+         pathway = Hugo_Symbol,
+         event = Hugo_Symbol,
+         pathway_new = Hugo_Symbol,
+         median_value = rowMedians(as.matrix(across(all_of(column_names))), na.rm = TRUE),
+         early_ratio = rowMeans(dplyr::select(., all_of(column_names)) < 0.5, na.rm = TRUE)) %>% 
+  group_by(sample_id, pathway) %>%
+  slice_min(median_value, n = 1, with_ties = FALSE) %>%
+  ungroup() %>%
+  dplyr::select(all_of(kept_cols))
+  
+write.csv(data_timing_drivermutations, file = paste0(path_gritic_pathway, "/diff_drivermutations.csv"), row.names = F)
+length(unique(data_timing_drivermutations$sample_id))
+
+table(data_timing_drivermutations$category)
+Freq <- as.data.frame(table(data_timing_drivermutations$Hugo_Symbol, data_timing_drivermutations$histology_abbreviation))
+```
+
+# 4. Timing for APM
+```{r}
+data_timing_APM_all <- fread(paste0(path_gritic_pathway, "/nonsyn_filter_diff.csv"))  %>% 
+  filter(Tumor_Sample_Barcode %in% sample_MSS) %>%
+  filter(Tumor_Sample_Barcode %in% sample_sucess) %>%
+  filter(Hugo_Symbol %in% APM) %>%
+  mutate(subclonal_ratio = rowMeans(dplyr::select(., all_of(column_names)) == 1.01, na.rm = TRUE),
+         subclonal = ifelse(subclonal_ratio > 0.5, "subclonal", "clonal")) %>%
+  group_by(Tumor_Sample_Barcode) %>%
+  #slice_min(abs(median_value - median(median_value, na.rm = TRUE)), n = 1, with_ties = FALSE) %>% # Median
+  slice_min(median_value, n = 1, with_ties = FALSE) %>% #minimun
+  #slice_min(hdi_width, n = 1, with_ties = FALSE) %>%
+  #slice_max(early_ratio, n = 1, with_ties = FALSE) %>%
+  ungroup() %>%
+  mutate(
+    sample_id = Tumor_Sample_Barcode,
+    Hugo_Symbol = "APM",
+    pathway = "APM",
+    event = "APM",
+    pathway_new = "APM"
+  ) %>%
+  dplyr::select(all_of(kept_cols))
+
+write.csv(data_timing_APM_all, file = paste0(path_gritic_pathway, "/diff_APM.csv"), row.names = F)
+```
+
+# 5. Timing for pathways
+## Each pathway
+```{r}
+data_timing_ratio <- fread(paste0(path_gritic_pathway, "/nonsyn_filter_diff.csv"))
+
+cell_types <- c("MHCregulators", "Tcells", "NKcells", "Macrophages", "GammadeltaTcells")
+regulators <- c("pos", "neg")
+
+for (cell_type in cell_types) {
+  
+   CRISPR_path <- paste0("/Users/wchen20/Desktop/2026-02-16_Draft/Revision/R1Major2/005/")
+   
+   for (reg in regulators) {
+    
+      CRISPR_top10 <- fread(paste0(CRISPR_path, "/Summary/", cell_type, "_C5BP_", reg, "_list.csv"), header = T) %>% 
+        dplyr::mutate(Pathway = ID, Pathway1 = Description) %>%
+        dplyr::select(Pathway, Pathway1)
+      
+      CRISPR_pathways <- fread(paste0(CRISPR_path, "/Summary/", cell_type, "_C5BP_", reg, "_allgenelist.csv")) %>% 
+        inner_join(CRISPR_top10, by = c("Pathway", "Pathway1")) %>%
+        dplyr::select(Gene, Pathway1)
+     
+     pathway_list <- unique(CRISPR_pathways$Pathway1)
+        
+     for (pathway in pathway_list) {
+       
+        pathway_title <- str_to_title(pathway)
+        pathway <- sub("/", "-", pathway)
+        plot_key <- paste0(cell_type, "_", reg, "_", pathway)
+        
+        CRISPR_gene <- CRISPR_pathways %>% filter(Pathway1 == !!pathway) %>% pull(Gene)
+          
+        tryCatch({
+          
+          df_Reg <- data_timing_ratio %>%
+             filter(Hugo_Symbol %in% !!CRISPR_gene) %>%
+             filter(Variant_Classification %in% non_syn) %>%
+              group_by(Tumor_Sample_Barcode) %>%
+              #slice_min(abs(median_value - median(median_value, na.rm = TRUE)), n = 1, with_ties = FALSE) %>%
+              slice_min(median_value, n = 1, with_ties = FALSE) %>% 
+              #slice_min(hdi_width, n = 1, with_ties = FALSE) %>%
+              #slice_max(early_ratio, n = 1, with_ties = FALSE) %>%
+              ungroup() %>% 
+              mutate(sample_id = Tumor_Sample_Barcode,
+                    Hugo_Symbol = pathway,
+                    event = pathway) %>%
+             dplyr::select(c("sample_id", "Hugo_Symbol", "event", everything()))
+ 
+           write.csv(df_Reg, file = paste0(path_gritic_pathway, "/difference_", cell_type, "_", reg, "_", pathway, ".csv"), row.names = F)
+           
+             }, error = function(e) {
+                    message("Error processing ", cell_type, "_", reg, "_", pathway, ": ", e$message)
+             })
+     }
+   }
+}
+```
+
+## Combined
+```{r}
+rename_list <- fread("/Users/wchen20/Desktop/PCAWG/CRISPR/CRISPRscreen20240118/rename_list.csv") %>% 
+  mutate(pathway = str_to_title(pathway),
+         pathway = sub("/", "-", pathway))
+
+file_paths <- list.files(path = path_gritic_pathway, pattern = "difference_*", recursive = FALSE, full.names = TRUE)
+data_list <- list()
+
+for (file in file_paths) {
+       
+     file_name <- basename(file)
+     file_name <- sub("difference_", "", file_name)
+     file_name <- sub(".csv", "", file_name)
+     data_list[[file_name]] <- fread(file) %>% mutate(Study = file_name)
+}
+
+diff_pathway <- tidy_list(data_list) %>% 
+  tidyr::separate(Study, into = c("celltype", "regulator", "pathway"), extra = "merge", fill = "right")  %>%
+  mutate(pathway = str_to_title(pathway),
+         aliquot_id = Tumor_Sample_Barcode) %>% 
+  inner_join(rename_list,., by = "pathway") %>% 
+  mutate(pathway_new = case_when(pathway_new == "Antigen Presentation via MHC-I" & celltype == "MHCregulators" ~ paste0(pathway_new, " (MHC-I) "),
+                                 pathway_new == "Antigen Presentation via MHC-I" & celltype == "Tcells" ~ paste0(pathway_new, " (Tcells) "),
+                                 pathway_new == "Antigen Processing and Presentation" & celltype == "NKcells" ~ paste0(pathway_new, " (NKcells) "),
+                                 pathway_new == "IFNg Signaling" & celltype == "NKcells" ~ paste0(pathway_new, " (NKcells) "),
+                                 pathway_new == "IFNg Signaling" & celltype == "MHCregulators" ~ paste0(pathway_new, " (MHC-I)"),
+                                 pathway_new == "IFNg Signaling" & celltype == "Tcells" ~ paste0(pathway_new, " (Tcells)"),
+                                 pathway_new == "Necroptosis" & celltype == "Tcells" ~ paste0(pathway_new, " (Tcells)"),
+                                 pathway_new == "Necroptosis" & celltype == "NKcells" ~ paste0(pathway_new, " (NKcells)"),
+                                 pathway_new == "Regulation of Autophagy" & celltype == "MHCregulators" ~ paste0(pathway_new, " (MHC-I)"),
+                                 pathway_new == "Autophagy" & celltype == "Tcells" ~ paste0(pathway_new, " (Tcells)"),
+                                 pathway_new == "TNF Pathway" & celltype == "Tcells" ~ paste0(pathway_new, " (Tcells)"),
+                                 pathway_new == "TNF Pathway" & celltype == "NKcells" ~ paste0(pathway_new, " (NKcells)"),
+                                 pathway_new == "IFNa Pathway" & celltype == "MHCregulators" ~ paste0(pathway_new, " (MHC-I)"),
+                                 pathway_new == "IFNa Pathway" & celltype == "GammadeltaTcells" ~ paste0(pathway_new, " (gdTcells)"),
+                                 pathway_new == "IFNg Pathway" & celltype == "GammadeltaTcells" ~ paste0(pathway_new, " (gdTcells)"),
+                                 TRUE ~ pathway_new)) %>%
+  mutate(pathway = pathway_new) %>%
+  dplyr::select(all_of(kept_cols), "celltype", "regulator")
+
+write.csv(diff_pathway, file = paste0(path_gritic_pathway, "/diff_all.csv"), row.names = F)
+```
+
+# 6. Timing for copy number losses
+## Timing of losses
+```{r}
+INFy_loss <- fread("/Users/wchen20/Desktop/2026-02-16_Draft/Revision/R2Major9/IFNy_loss.csv") %>%
+  distinct(sample_id, .keep_all = F) %>% 
+  mutate(event = "IFNgLoss")
+
+HLALOH_path <- "/Users/wchen20/Desktop/PCAWG/MHC_evolution/HLALOH/results/"
+df_HLALOH <- fread(paste0(HLALOH_path, "/df_HLALOH.csv")) %>%
+  distinct(sample_id, .keep_all = F)  %>% 
+  mutate(event = "HLALOH")
+
+df_loss <- df_HLALOH %>%
+  rbind(INFy_loss, .) %>%
+  filter(sample_id %in% sample_wgd) %>%
+  filter(sample_id %in% sample_sucess) %>%
+  filter(sample_id %in% sample_MSS) %>%
+  inner_join(., wgd_median, by = "sample_id") %>%
+  rowwise() %>%
+  mutate(new_data = list(map_dfc(1:250, ~ runif(1, min = 0, max = wgd_mediantiming - epsilon)))) %>%
+  unnest_wider(new_data) %>%
+  rename_with(~ paste0("X", 0:249), .cols = starts_with("...")) %>% 
+  ungroup() %>% 
+  mutate(
+         median_value = rowMedians(as.matrix(dplyr::select(., all_of(column_names))), na.rm = TRUE),
+         early_ratio = rowMeans(dplyr::select(., all_of(column_names)) < 0.5, na.rm = TRUE),
+         pathway = event,
+         pathway_new = event,
+         Tumor_Sample_Barcode = sample_id,
+         Hugo_Symbol = event,
+         Chromosome = NA, 
+         Start_Position = NA, 
+         End_Position= NA, 
+         Reference_Allele = NA, 
+         Tumor_Seq_Allele1 = NA,
+         Tumor_Seq_Allele2 = NA,
+         Variant_Classification = "Missense_Mutation", 
+         Variant_Type = "CNV") %>% 
+  inner_join(LOH_type, by = "sample_id")
+  
+write.csv(df_loss, file = paste0(path_gritic_pathway, "/diff_loss.csv"), row.names = F)
+```
+
+# 9. Timing for WGD
+```{r}
+wgd_median <- fread("/Users/wchen20/Desktop/PCAWG/MHC_evolution/GRITIC/output/wgd_median.csv") %>%
+        filter(Tumor_Sample_Barcode %in% sample_sucess) %>%
+        filter(Tumor_Sample_Barcode %in% sample_MSS) %>%
+        mutate(pathway = "WGD",
+               median_value = wgd_mediantiming,
+               pathway_new = "WGD",
+               Tumor_Sample_Barcode = sample_id,
+               aliquot_id = sample_id,
+               event = "WGD",
+               Hugo_Symbol = "WGD") %>%
+  filter(!is.na(wgd_mediantiming)) 
+  
+setDT(wgd_median)
+wgd_median[, (paste0("X", 0:249)) := lapply(1:250, \(x) wgd_mediantiming)]
+
+wgd_median <- wgd_median %>% mutate(Hugo_Symbol = "WGD",
+         Chromosome = NA, 
+         Start_Position = NA, 
+         End_Position= NA, 
+         Reference_Allele = NA, 
+         Tumor_Seq_Allele1 = NA,
+         Tumor_Seq_Allele2 = NA,
+         Variant_Classification = "Missense_Mutation", 
+         Variant_Type = NA) %>%  
+  mutate(median_value = rowMedians(as.matrix(dplyr::select(., all_of(column_names))), na.rm = TRUE),
+         early_ratio = rowMeans(dplyr::select(., all_of(column_names)) < 0.5, na.rm = TRUE)) %>%
+  dplyr::select(all_of(kept_cols))
+write.csv(wgd_median, file = paste0(path_gritic_pathway, "/diff_WGD.csv"), row.names = F)
+```
+
+# 10. Median timing
+## Median for all indexes
+```{r}
+data_timing_median <- data_timing_ratio %>%
+  filter(Tumor_Sample_Barcode %in% sample_sucess) %>%
+  filter(Tumor_Sample_Barcode %in% sample_MSS) %>%
+  mutate(aliquot_id = Tumor_Sample_Barcode) %>%
+  group_by(aliquot_id) %>%
+  slice_min(
+    abs(median_value - median(median_value, na.rm = TRUE)),
+    n = 1,
+    with_ties = FALSE
+  ) %>%
+  ungroup() %>%
+  mutate(pathway = "Median",
+         event = "Median",
+         Hugo_Symbol = "Median",
+         Other_Info = NA,
+         pathway_new = "Median",
+         Chromosome = NA, 
+         Start_Position = NA, 
+         End_Position= NA, 
+         Reference_Allele = NA, 
+         Tumor_Seq_Allele1 = NA,
+         Tumor_Seq_Allele2 = NA,
+         Variant_Classification = "Missense_Mutation", 
+         Variant_Type = NA,
+         Tumor_Sample_Barcode = aliquot_id,
+         sample_id = aliquot_id) %>%
+  dplyr::select(all_of(kept_cols)) 
+write.csv(data_timing_median, file = paste0(path_gritic_pathway, "/diff_Median_index.csv"), row.names = F)
+```
+
+# 11. Combine all timing results
+## Pathways without HLALOH
+```{r}
+## Driver mutations
+data_timing_driver <- fread(paste0(path_gritic_pathway, "/diff_drivermutations.csv")) %>% 
+  filter(Tumor_Sample_Barcode %in% sample_sucess) %>%
+  filter(Tumor_Sample_Barcode %in% sample_MSS) %>%
+  mutate(driver_gene = "yes") %>% 
+  mutate(aliquot_id = Tumor_Sample_Barcode)
+
+## APM
+data_timing_APM_all <- fread(paste0(path_gritic_pathway, "/diff_APM.csv")) %>% 
+                       mutate(regulator = "other",
+                              aliquot_id = Tumor_Sample_Barcode,
+                              driver_gene = "no")
+data_timing_pathway_all <- fread(paste0(path_gritic_pathway, "/diff_all.csv")) %>% 
+                       mutate(aliquot_id = Tumor_Sample_Barcode,
+                              driver_gene = "no")
+
+## Median
+data_timing_median <- fread(paste0(path_gritic_pathway, "/diff_Median_index.csv")) %>% 
+                       mutate(aliquot_id = Tumor_Sample_Barcode)
+
+diff_all <- rbind(
+  as.data.table(data_timing_driver),
+  as.data.table(data_timing_APM_all),
+  as.data.table(data_timing_pathway_all),
+  as.data.table(data_timing_median),
+  fill = TRUE) %>%   
+  filter(Tumor_Sample_Barcode %in% sample_sucess) %>%
+  filter(Tumor_Sample_Barcode %in% sample_MSS)
+
+diff_all_selected  <- diff_all %>%
+  group_by(pathway, histology_abbreviation) %>%
+  summarise(n_samples = n_distinct(aliquot_id), .groups = "drop") %>%
+  ungroup() %>% 
+  inner_join(diff_all, ., by = c("pathway", "histology_abbreviation")) %>%
+  ungroup()
+write.csv(diff_all_selected, paste0(path_gritic_pathway, "diff_all_selected_drivermutation.csv"), row.names = F)
+
+check <- diff_all %>% filter(pathway == "Median")
+check <- diff_all_selected %>% filter(pathway == "Median")
+check <- diff_all %>% filter(pathway == "Median")
+```
+
+## Pathways with HLALOH
+```{r}
+sample_wgd = unique(wgd_median$sample_id)
+
+## Same
+data_timing_wgd_all <- fread(paste0(path_gritic_pathway, "/diff_WGD.csv")) %>% 
+                       mutate(aliquot_id = Tumor_Sample_Barcode,
+                              driver_gene = "no",
+                              sample_id = Tumor_Sample_Barcode)
+
+data_timing_loss <- fread(paste0(path_gritic_pathway, "/diff_loss.csv")) %>% 
+                       mutate(aliquot_id = Tumor_Sample_Barcode,
+                              driver_gene = "no")
+
+diff_all <- rbind(
+  as.data.table(data_timing_driver),
+  as.data.table(data_timing_APM_all),
+  as.data.table(data_timing_pathway_all),
+  as.data.table(data_timing_median),
+  as.data.table(data_timing_wgd_all),
+  as.data.table(data_timing_loss), fill = TRUE) %>% 
+  mutate(aliquot_id = sample_id) %>%   
+  filter(Tumor_Sample_Barcode %in% sample_sucess) %>%
+  filter(Tumor_Sample_Barcode %in% sample_MSS) %>%
+  filter(Tumor_Sample_Barcode %in% sample_wgd)
+
+diff_all_selected <- diff_all %>%
+  filter(Tumor_Sample_Barcode %in% sample_wgd) %>%
+  group_by(pathway, histology_abbreviation) %>%
+  summarise(n_samples = n_distinct(aliquot_id), .groups = "drop") %>%
+  ungroup() %>% 
+  inner_join(diff_all, ., by = c("pathway", "histology_abbreviation")) %>%
+  ungroup()
+write.csv(diff_all_selected, paste0(path_gritic_pathway, "diff_all_selected_loss.csv"), row.names = F)
+
+## Check results
+check <- diff_all_selected %>% filter(histology_abbreviation == "Liver-HCC", pathway == "HLALOH")
+
+check <- data_timing_pathway_all %>% 
+  filter(pathway == "Cellular Amino Acid Metabolic Process") %>%
+  filter(histology_abbreviation %in% c("Breast-AdenoCA", "ColoRect-AdenoCA"))
+
+check <- diff_all_selected  %>% 
+  filter(pathway == "Cellular Amino Acid Metabolic Process") %>%
+  filter(histology_abbreviation %in% c("Breast-AdenoCA", "ColoRect-AdenoCA"))
+
+check <- diff_all_selected  %>% 
+  filter(pathway == "HLALOH") %>%
+  filter(histology_abbreviation %in% c("Breast-AdenoCA", "ColoRect-AdenoCA"))
+```
+
+# 12. Bootstrap
+## 1000 bootstraps
+### Pathway min and driver mutation
+```{r}
+# Driver mutation
+path_save = "/Users/wchen20/Desktop/PCAWG/MHC_evolution/GRITIC/output/allmutation/mafgritic_nonsyn/pathway/min_drivermutation_250/"
+path_plot= "/Users/wchen20/Desktop/2026-02-16_Draft/Revision/R1Major5/pathway_min/min_5/min_drivermutation/"
+```
+
+## 1000 bootstraps without median
+```{r}
+replacement = "yes"
+median_reference = "no"
+n_boot = 1000
+savename = "min"
+var = "median_value"
+direction = "lower"
+number = 5
+number_sk = 5
+use_pro = "yes"
+```
+
+## Read data
+```{r}
+included_cnv = "wgd"
+included_cnv = "wgd_hlaloh"
+included_cnv = "nocnv"
+
+if (included_cnv == "wgd_hlaloh") {
+  diff_all_selected <- fread(paste0(path_save, "diff_all_selected_loss.csv")) %>% 
+  filter(sample_id %in% sample_wgd)
+  
+  wgd_type = inner_join(wgd_median, LOH_type, by = "sample_id")
+  freq_type <- as.data.frame(table(wgd_type$histology_abbreviation))
+  names(freq_type) <- c("histology_abbreviation", "type_count")
+
+} else if (included_cnv == "wgd") {
+  diff_all_selected <- fread(paste0(path_save, "diff_all_selected_HLALOH.csv")) %>% 
+    filter(pathway != "HLALOH")
+} else if (included_cnv == "nocnv") {
+   diff_all_selected <- fread(paste0(path_save, "diff_all_selected_drivermutation.csv"))
+   
+   sample_unique <- diff_all_selected %>% distinct(sample_id, .keep_all = T)
+   freq_type <- as.data.frame(table(sample_unique$histology_abbreviation))
+   names(freq_type) <- c("histology_abbreviation", "type_count")
+}
+```
+
+# 13. Timeline
+```{r}
+n_pathway = 3
+n_driver_included = 5
+n_pathway_included = 10
+types = unique(diff_all_selected$histology_abbreviation)
+only_table = "yes"
+
+for (type in types) {
+  
+  if (!type %in% c("Skin-Melanoma")) {
+    number_filter = number
+  } else {
+    number_filter = number_sk
+  }
+  
+  cat(type, "\n")
+  
+  drivergene_cancer <- driver_list %>% filter(grepl(type, Tissue)) %>% pull(Gene)
+  
+  diff_all_selected_driver <- diff_all_selected %>% 
+    filter(driver_gene == "yes") %>%
+    filter(pathway %in% drivergene_cancer)
+  
+  diff_all_selected_pathway <- diff_all_selected %>% 
+    filter(driver_gene == "no")
+  
+  diff_all_selected_median <- diff_all_selected %>% 
+    filter(pathway == "Median")
+  
+  diff_all_included_sub <- rbind(diff_all_selected_driver, diff_all_selected_pathway) %>%
+    rbind(., diff_all_selected_median) %>%
+    filter(histology_abbreviation == !!type) %>% 
+    filter(n_samples >= !!number_filter) %>%
+    group_by(sample_id) %>%
+    filter(n_distinct(pathway) >= n_pathway) %>%
+    ungroup()
+    
+  top_genes <- diff_all_included_sub %>%
+  filter(driver_gene == "yes") %>%
+  inner_join(freq_type, by = "histology_abbreviation") %>%
+  mutate(prevelance = n_samples / type_count) %>%
+  filter(prevelance > 0.05) %>%
+  distinct(pathway, .keep_all = T) %>%
+  group_by(histology_abbreviation) %>%
+  dplyr::slice_max(
+    order_by = n_samples,
+    n = n_driver_included,
+    with_ties = F
+  ) %>%
+  ungroup() %>%
+  pull(pathway) %>%
+  unique()
+  
+  top_pathways <- diff_all_included_sub %>%
+  filter(driver_gene != "yes") %>%
+  filter(pathway != "yes") %>%
+  inner_join(freq_type, by = "histology_abbreviation") %>%
+  mutate(prevelance = n_samples / type_count) %>%
+  filter(prevelance > 0.05) %>%
+  distinct(pathway, .keep_all = T) %>%
+  group_by(histology_abbreviation, pathway) %>%
+  dplyr::slice_max(
+    order_by = n_samples,
+    n = n_pathway_included,
+    with_ties = T) %>%
+  ungroup() %>%
+  pull(pathway) %>%
+  unique()
+  
+  if (median_reference == "yes") {
+    
+    diff_all_included_sub <- diff_all_selected %>% 
+        filter(histology_abbreviation == !!type) %>% 
+        filter(n_samples >= !!number_filter) %>%
+        filter(pathway %in% c(top_genes, top_pathways, "Median")) %>%
+        group_by(sample_id) %>%
+        filter(n_distinct(pathway) >= n_pathway) %>%
+        ungroup() 
+     
+     ref_cat = "Median"
+   
+  } else if (median_reference == "no") {
+    
+      diff_all_included_sub <- diff_all_selected %>% 
+        filter(histology_abbreviation == !!type) %>% 
+        filter(n_samples >= !!number_filter) %>%
+        filter(pathway %in% c(top_genes, top_pathways, "Median")) %>%
+        group_by(sample_id) %>%
+        filter(n_distinct(pathway) >= n_pathway) %>%
+        ungroup() %>%
+        filter(pathway != "Median")
+      
+      ref_cat <- diff_all_included_sub %>% arrange(pathway) %>%
+        dplyr::slice(1) %>%
+        pull(pathway)
+      
+  }
+  
+  if (nrow(diff_all_included_sub) > 0) {
+      setDT(diff_all_included_sub)
+      table_prob <- generate_pairwise(dt = diff_all_included_sub,
+                                      sample_col = "sample_id",
+                                      event_col = "pathway")
+      
+      dir.create(paste0(path_plot, "/PhylogicNDT/", included_cnv, "/", type, "/"), recursive = T)
+      
+      fwrite(
+        table_prob,
+        file = file.path(paste0(path_plot, "/PhylogicNDT/", included_cnv, "/", type, "/", type, ".comp.tsv")),
+        sep = "\t")
+         
+      samplings <- c("all", 50, 100, 150, 200)
+      
+      for (sampling in samplings) {
+  
+      path_comp_all = paste0(path_plot, "/PhylogicNDT/", included_cnv, "/", type, "_", sampling, "/")
+      dir.create(path_comp_all, recursive = T)
+      
+      table_prob <- compare_event_timing(dt = diff_all_included_sub,
+                                         sample_col = "aliquot_id",
+                                         event_col = "pathway",
+                                         n_cols = sampling,
+                                         seed = 123)
+
+      fwrite(
+        table_prob,
+        file = file.path(path_comp_all, paste0(type, ".comp.tsv")),
+        sep = "\t")
+      }
+      
+  if (only_table == "yes") {
+    cat(paste0("Outputing for ",type, "\n"))
+  } else {
+  
+  bootstrap_results <- vector("list", n_boot)
+  set.seed(123)
+  sample_ids_all <- unique(diff_all_included_sub$aliquot_id)
+
+  bootstrap_results <- list()
+
+  if (replacement %in% c("yes", "no")) {
+    
+    for (b in seq_len(n_boot)) {
+
+    if (replacement == "no") {
+
+      sampled_ids <- sample(
+        sample_ids_all,
+        size = ceiling(length(sample_ids_all) * 0.8),
+        replace = FALSE
+      )
+
+      boot_data <- diff_all_included_sub %>%
+        filter(aliquot_id %in% sampled_ids)
+
+    } else {
+
+      sampled_ids <- sample(
+        sample_ids_all,
+        replace = TRUE
+      )
+
+      boot_cols <- paste0("X", 0:249)
+
+      boot_data <- lapply(seq_along(sampled_ids), function(i) {
+
+        sid <- sampled_ids[i]
+
+        tmp <- diff_all_included_sub %>%
+          filter(aliquot_id == sid)
+
+        tmp$aliquot_id <- paste0(tmp$aliquot_id, "_boot", i)
+
+        chosen_col <- sample(boot_cols, 1)
+
+        tmp$median_value <- tmp[[chosen_col]]
+
+        tmp <- tmp %>%
+          group_by(pathway, aliquot_id) %>%
+          dplyr::slice_min(median_value, n = 1) %>%
+          ungroup()
+
+        tmp
+      }) %>%
+        bind_rows()
+    }
+    
+    path_comp = paste0(path_plot, "/comp/", type, "/", b, "/")
+    dir.create(path_comp, recursive = T)
+    
+    if (use_pro == "no") {
+          
+      temp_final <- generate_winner_table(
+      data          = boot_data,
+      gene_col      = "pathway",
+      sample_col    = "aliquot_id",
+      histology_col = "histology_abbreviation",
+      value_col     = var,
+      order         = direction,
+      path_comp     = path_comp,
+      comp_median   = "yes") %>% 
+      filter(!(Gene1.wins == 0 & Gene2.wins == 0))
+      
+    } else if (use_pro == "yes") {
+      setDT(boot_data)
+      table_prob <- generate_pairwise(dt = boot_data,
+                                      sample_col = "aliquot_id",
+                                      event_col = "pathway")
+      
+      fwrite(table_prob,
+             file = file.path(paste0(path_comp, b, ".comp.tsv")),
+             sep = "\t")
+      
+      temp_final <- table_prob %>%
+        mutate(Gene1.win = as.integer(`p1->2` > `p2->1`),
+               Gene2.win = as.integer(`p2->1` > `p1->2`),
+               Unknown   = as.integer(`p1->2` == `p2->1`)) %>%
+        group_by(eve1, eve2) %>%
+        summarise(Gene1.wins = sum(Gene1.win),
+                  Gene2.wins = sum(Gene2.win),
+                  unknown    = sum(Unknown),
+                  .groups = "drop") %>%
+        rename(Mutation1.Gene = eve1,
+               Mutation2.Gene = eve2) %>% 
+        filter(!(Gene1.wins == 0 & Gene2.wins == 0)) %>% 
+        filter(`Mutation1.Gene` != `Mutation2.Gene`)
+      
+    }
+
+    if (nrow(temp_final) == 0) next
+
+    all_players <- sort(unique(c(
+      temp_final$Mutation1.Gene,
+      temp_final$Mutation2.Gene
+    )))
+
+    temp_final <- temp_final %>%
+      mutate(
+        Mutation1.Gene = factor(
+          Mutation1.Gene,
+          levels = all_players
+        ),
+        Mutation2.Gene = factor(
+          Mutation2.Gene,
+          levels = all_players
+        )
+      )
+
+    BT_results <- tryCatch({
+          BTm(
+          cbind(Gene1.wins, Gene2.wins),
+          Mutation1.Gene,
+          Mutation2.Gene,
+          refcat = ref_cat,
+          data = temp_final
+        )
+
+    }, error = function(e) NULL)
+
+    if (is.null(BT_results)) next
+
+    bt_df <- as.data.frame(summary(BT_results)$coefficients)
+
+    bt_df$Gene <- substring(rownames(bt_df), 3)
+    bt_df$bootstrap <- b
+
+    bootstrap_results[[b]] <- bt_df
+  }
+
+  } else {
+
+  for (b in seq_along(column_names)) {
+
+    col <- column_names[b]
+    boot_data <- copy(diff_all_included_sub)
+    boot_data$median_value <- boot_data[[col]]
+    boot_data <- boot_data %>%
+          group_by(pathway, sample_id) %>%
+          slice_min(median_value, n = 1) %>%
+          ungroup()
+    
+    path_comp = paste0(path_plot, "/comp/", type, "/", b, "/")
+    dir.create(path_comp, recursive = T)
+    
+    temp_final <- generate_winner_table(
+      data          = boot_data,
+      gene_col      = "pathway",
+      sample_col    = "aliquot_id",
+      histology_col = "histology_abbreviation",
+      value_col     = var,
+      order         = direction,
+      path_comp     = path_comp,
+      comp_median   = "yes"
+    ) %>% filter(!(Gene1.wins == 0 & Gene2.wins == 0))
+
+    if (nrow(temp_final) == 0) next
+
+    all_players <- sort(unique(c(
+      temp_final$Mutation1.Gene,
+      temp_final$Mutation2.Gene
+    )))
+
+    temp_final <- temp_final %>%
+      mutate(
+        Mutation1.Gene = factor(
+          Mutation1.Gene,
+          levels = all_players
+        ),
+        Mutation2.Gene = factor(
+          Mutation2.Gene,
+          levels = all_players
+        )
+      )
+
+    BT_results <- tryCatch({
+
+         BTm(
+          cbind(Gene1.wins, Gene2.wins),
+          Mutation1.Gene,
+          Mutation2.Gene,
+          refcat = ref_cat,
+          data = temp_final
+        )
+
+    }, error = function(e) NULL)
+
+    if (is.null(BT_results)) next
+
+    bt_df <- as.data.frame(summary(BT_results)$coefficients)
+    bt_df$Gene <- substring(rownames(bt_df), 3)
+    bt_df$bootstrap <- b
+    bootstrap_results[[col]] <- bt_df
+  }
+  }
+
+  bootstrap_results_combined <- bind_rows(bootstrap_results) %>% mutate(bootstrap = as.integer(bootstrap))
+  ref_row <- tibble(Estimate = rep(0, n_boot),
+                      `Std. Error` = rep(NA_real_),
+                      `z value` = rep(NA_real_),
+                      `Pr(>|z|)` = rep(NA_real_),
+                      Gene = ref_cat,
+                      bootstrap = 1:n_boot)
+      
+  bootstrap_results_df <- bind_rows(ref_row, bootstrap_results_combined)
+  
+  if (nrow(bootstrap_results_df) > 100) {
+    
+  bootstrap_results_df$Gene <- sapply(bootstrap_results_df$Gene, insert_newlines_every_five_words)
+  
+  width = 5.5
+  height = 6
+  plot_BT(bootstrap_results_df, path_plot, type, width, height)
+  }
+  }
+  }
+}
+```

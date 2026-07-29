@@ -1,0 +1,626 @@
+---
+title: "R1Major5_uncertainty_wgd_tp53"
+author: "AJ"
+date: "2026-04-20"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Library packages
+```{r}
+rm(list = ls())
+
+suppressWarnings(library("stringr"))
+suppressWarnings(library("dplyr"))
+suppressWarnings(library("patchwork"))
+suppressWarnings(library("ggpubr"))
+suppressWarnings(library("ggridges"))
+suppressWarnings(library("truncnorm"))
+suppressWarnings(library("tidyr"))
+suppressWarnings(library("scatterpie"))
+suppressWarnings(library("tidyselect"))
+suppressWarnings(library("pillar"))
+suppressWarnings(library("data.table"))
+suppressWarnings(library("readr"))
+suppressWarnings(library("ggplot2"))
+suppressWarnings(library("openxlsx"))
+suppressWarnings(library("ggrepel"))
+suppressWarnings(library("tibble"))
+suppressWarnings(library("textshape"))
+suppressWarnings(library("matrixStats"))
+suppressWarnings(library("bayestestR"))
+
+## Path
+PCAWG_path <- "/rsrch6/scratch/hema_bio-Malignan/wchen20/PCAWG"
+PCAWG_path <- "/Users/wchen20/Desktop/PCAWG"
+
+source("/Users/wchen20/Desktop/PCAWG/code/source/basic.R")
+source("/Users/wchen20/Desktop/PCAWG/code/source/insert_newlines.R")
+source("/Users/wchen20/Desktop/PCAWG/code/source/plot_segTiming.R")
+
+## Timing of WGD
+wgd_median <- fread("/Users/wchen20/Desktop/PCAWG/MHC_evolution/GRITIC/output/wgd_median.csv") %>% dplyr::select(wgd_mediantiming, sample_id)
+
+path_hdi = "/Users/wchen20/Desktop/PCAWG/MHC_evolution/GRITIC/output/allmutation/all_HDI/"
+path_save = "/Users/wchen20/Desktop/2026-02-16_Draft/Revision/R1Major5/"
+
+cols <- paste0("X", 0:249)
+breaks_seq <- seq(0, 0.95, by = 0.05)
+bin_levels <- c(
+  levels(cut(0, breaks = breaks_seq, include.lowest = TRUE, right = FALSE)),
+  "> 0.95"
+)
+
+breaks_seq <- seq(0, 1.05, by = 0.05)
+breaks_seq_nrpcc <- seq(0, 80, by = 5)
+
+plot_uncertainty <- function(data) {
+  
+  df_freq <- data %>%
+    dplyr::count(uncertainty_bin) %>%
+    mutate(proportion = n / sum(n))
+  
+  plot <- ggplot(df_freq, aes(x = uncertainty_bin, y = proportion)) +
+  geom_bar(stat = "identity", fill = "#00A087") +
+  labs(
+    x = "",
+    y = "Proportion",
+    title = "Distribution of Uncertainty"
+  ) +
+  theme_bw() +
+  theme(axis.title.y = element_text(size = 10, colour = "black"),
+        axis.title.x = element_text(size = 14),
+        legend.title = element_blank(), 
+        legend.text = element_text(size = 12),
+        axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1, size = 8, colour = "black"),
+        axis.text.y = element_text(size = 8, colour = "black"),
+        title = element_text(size = 10),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank()) +
+  coord_cartesian(ylim = c(0, 0.6))
+  
+  return(plot)
+  
+}
+```
+
+# Set path
+```{r}
+path_figure <- "/Users/wchen20/Desktop/2026-02-16_Draft/Revision_Figures/Original_output/"
+
+path_gritic = "/Users/wchen20/Desktop/PCAWG/MHC_evolution/GRITIC/output/allmutation/mafgritic_nonsyn/"
+path_gritic_pathway = "/Users/wchen20/Desktop/2026-02-16_Draft/Final_Results/8_MutationTiming/min_drivermutation_250/"
+
+path_HLALOH = "/Users/wchen20/Desktop/2026-02-16_Draft/Final_Results/1_APM/2_HLALOH/"
+```
+
+# 1. Check HDI
+## Manul
+```{r}
+data_timing_driver_all <- fread(paste0(path_gritic_pathway, "/nonsyn_filter_diff.csv"))
+
+check_250 <- data_timing_driver_all %>% 
+             filter(Hugo_Symbol == "HIVEP3",
+                    Chromosome == 1,
+                    Start_Position == 41978926,
+                    End_Position == 41978926,
+                    Variant_Classification == "Missense_Mutation",
+                    Tumor_Sample_Barcode == "5975deb5-00d2-4d18-b5c0-34ac9947fe11")
+
+## Check HDI
+p = 0.95
+hdi_results <- t(apply(
+  as.matrix(check_250[, ..column_names]),
+  1,
+  function(x) {
+    h <- hdi(x, ci = p)
+    c(
+      HDI_low  = h$CI_low,
+      HDI_high = h$CI_high
+    )
+  }
+))
+
+check_250[, `:=`(
+  HDI_low  = hdi_results[, "HDI_low"],
+  HDI_high = hdi_results[, "HDI_high"],
+  hdi_width_check = hdi_results[, "HDI_high"] - hdi_results[, "HDI_low"]
+)]
+
+check_250
+```
+
+## 2. 95% HDI
+```{r}
+i = 5
+mafgritic_files <- list.files(path = path_hdi, pattern = paste0("*_", i, ".csv"), recursive = FALSE, full.names = TRUE)
+  
+data_all <- lapply(mafgritic_files, fread) %>% 
+    rbindlist() %>% 
+    mutate(sample_id = Tumor_Sample_Barcode) %>% 
+    inner_join(LOH_type, by = "sample_id") 
+
+Check_HDI <- data_all %>% 
+             filter(Hugo_Symbol == "HIVEP3",
+                    Chromosome == 1,
+                    Start_Position == 41978926,
+                    End_Position == 41978926,
+                    Variant_Classification == "Missense_Mutation",
+                    Tumor_Sample_Barcode == "5975deb5-00d2-4d18-b5c0-34ac9947fe11")
+```
+
+# Uncertainty by WGD and TP53
+```{r}
+props <- c(0.5, 0.6, 0.7, 0.8, 0.95)
+plot_uncertainty_all_list <- list()
+plot_uncertainty_wgd_list <- list()
+plot_uncertainty_nowgd_list <- list()
+plot_uncertainty_tp53_list <- list()
+plot_uncertainty_tp53_ov_list <- list()
+
+for (i in props) {
+  
+  p <- props[i]
+
+  mafgritic_files <- list.files(path = path_hdi, pattern = paste0("*_", i, ".csv"), recursive = FALSE, full.names = TRUE)
+  
+  data_all <- lapply(mafgritic_files, fread) %>% 
+    rbindlist() %>% 
+    mutate(sample_id = Tumor_Sample_Barcode) %>% 
+    inner_join(LOH_type, by = "sample_id") 
+  plot_uncertainty_all_list[[i]] <- plot_uncertainty(data_all)
+  
+  data_all_clonal <- data_all %>% filter(subclonal_ratio < 0.5) 
+  
+  data_nonsyn <- lapply(mafgritic_files, fread) %>% 
+    rbindlist() %>% 
+    mutate(sample_id = Tumor_Sample_Barcode) %>% 
+    inner_join(LOH_type, by = "sample_id") %>%
+    filter(Variant_Classification %in% non_syn)
+  
+  plot_uncertainty_nonsyn_list[[i]] <- plot_uncertainty(data_nonsyn)
+  
+  data_wgd <- data_all %>% 
+    mutate(sample_id = Tumor_Sample_Barcode) %>% 
+    inner_join(., wgd_median, by = "sample_id")
+  
+  plot_uncertainty_wgd_list[[i]] <- plot_uncertainty(data_wgd)
+  
+  data_nowgd <- data_all %>% filter(!Tumor_Sample_Barcode %in% unique(wgd_median$sample_id))
+  plot_uncertainty_nowgd_list[[i]] <- plot_uncertainty(data_nowgd)
+  
+  data_tp53 <- data_all %>%
+  filter(Hugo_Symbol == "TP53", Variant_Classification %in% non_syn)
+  plot_uncertainty_tp53_list[[i]] <- plot_uncertainty(data_tp53)
+  
+  data_tp53_ov <- data_all %>%
+  filter(Hugo_Symbol == "TP53", Variant_Classification %in% non_syn, histology_abbreviation == "Ovary-AdenoCA")
+  plot_uncertainty_tp53_ov_list[[i]] <- plot_uncertainty(data_tp53_ov)
+
+  }
+
+# Uncertainty for different intervals
+plot_uncertainty_all_com <- (plot_uncertainty_all_list[[1]] + plot_uncertainty_all_list[[2]])/(plot_uncertainty_all_list[[3]] + plot_uncertainty_all_list[[4]])
+  
+ggsave(
+  filename = paste0(path_save, "/HDI_uncertainty_all_CIs.pdf"),
+  plot     = plot_uncertainty_all_com,
+  width = 12, 
+  height = 5.5,
+  units    = "in")
+
+# Uncertainty for 95%CIs intervals
+i = 5 
+
+## All mutations  
+ggsave(
+  filename = paste0(path_save, "/HDI_uncertainty_95_CIs.pdf"),
+  plot     = plot_uncertainty_all_list[[i]],
+  width = 6, 
+  height = 2.5,
+  units    = "in")
+
+## All Nonsynomynous mutations 
+plot_uncertainty_nonsyn_list
+ggsave(filename = paste0(path_save, "/HDI_uncertainty_nonsyn_95_CIs.pdf"),
+       plot     = plot_uncertainty_nonsyn_list[[i]],
+       width = 6, 
+       height = 2.5,
+       units    = "in")
+
+# Uncertainty for different intervals by WGD
+plot_uncertainty_wgd_com <- (plot_uncertainty_wgd_list[[1]] + plot_uncertainty_wgd_list[[2]])/(plot_uncertainty_wgd_list[[3]] + plot_uncertainty_wgd_list[[4]])
+  
+ggsave(
+  filename = paste0(path_save, "/HDI_uncertainty_wgd_CIs.pdf"),
+  plot     = plot_uncertainty_wgd_com,
+  width = 12, 
+  height = 5.5,
+  units    = "in")
+  
+plot_uncertainty_nonwgd_com <- (plot_uncertainty_nowgd_list[[1]] + plot_uncertainty_nowgd_list[[2]])/(plot_uncertainty_nowgd_list[[3]] + plot_uncertainty_nowgd_list[[4]])
+  
+ggsave(
+  filename = paste0(path_save, "/HDI_uncertainty_nowgd_CIs.pdf"),
+  plot     = plot_uncertainty_nonwgd_com,
+  width = 12, 
+  height = 5.5,
+  units    = "in")
+
+plot_uncertainty_all_com <- plot_uncertainty_all_list[[5]] + plot_uncertainty_wgd_list[[5]] + plot_uncertainty_nowgd_list[[5]]
+ggsave(filename = paste0(path_save, "/HDI_uncertainty_wgd_CIs.pdf"),
+       plot     = plot_uncertainty_all_com,
+       width = 20, 
+       height = 5,
+       units    = "in")
+
+# Uncertainty for different intervals by TP53
+plot_uncertainty_tp53_com <- (plot_uncertainty_tp53_list[[1]] + plot_uncertainty_tp53_list[[2]])/(plot_uncertainty_tp53_list[[3]] + plot_uncertainty_tp53_list[[4]])
+  
+ggsave(
+  filename = paste0(path_save, "/HDI_uncertainty_tp53_CIs.pdf"),
+  plot     = plot_uncertainty_tp53_com,
+  width = 12, 
+  height = 5.5,
+  units    = "in")
+  
+plot_uncertainty_all_com <- plot_uncertainty_all_list[[5]] + plot_uncertainty_tp53_list[[5]] + plot_uncertainty_tp53_ov_list[[5]] 
+ggsave(filename = paste0(path_save, "/HDI_uncertainty_tp53_CIs.pdf"),
+       plot     = plot_uncertainty_all_com,
+       width = 20, 
+       height = 5,
+       units    = "in")
+
+plot_uncertainty_all_com <- plot_uncertainty_tp53_list[[i]] + plot_uncertainty_tp53_ov_list[[i]]
+ggsave(filename = paste0(path_save, "/HDI_uncertainty_tp53_CIs.pdf"),
+       plot     = plot_uncertainty_all_com,
+       width = 12, 
+       height = 3,
+       units    = "in")
+```
+
+# Uncertainty by CNV
+```{r}
+path_hdi <- "/Users/wchen20/Desktop/PCAWG/MHC_evolution/GRITIC/output/allmutation/all_HDI/"
+i = 5
+mafgritic_files <- list.files(path = path_hdi, pattern = paste0("*_", i, ".csv"), recursive = FALSE, full.names = TRUE)
+
+df_snv  <- lapply(mafgritic_files, fread) %>% 
+  rbindlist() %>% 
+  mutate(sample_id = Tumor_Sample_Barcode,
+         Chromosome = as.character(Chromosome),
+         Start_Position = as.numeric(Start_Position),
+         End_Position = as.numeric(End_Position)) %>% 
+  inner_join(LOH_type, by = "sample_id") %>% 
+  filter(subclonal_ratio < 0.5) 
+#write.csv(df_snv, file = paste0(path_hdi, "hdi_results_bin_5_all.csv"), row.names = F)
+
+#df_snv <- fread(paste0(path_hdi, "hdi_results_bin_5_all.csv"))
+
+## CNV
+cnv_hd <- fread("/Users/wchen20/Desktop/PCAWG/consensus_cnv/somatic_cna_annotated_merged.txt") %>%
+  mutate(total_cn = as.numeric(total_cn),
+         major_cn = as.numeric(major_cn),
+         minor_cn = as.numeric(minor_cn),
+         start = as.numeric(start),
+         end = as.numeric(end)) %>%
+  filter(!is.na(major_cn), !is.na(minor_cn)) %>%
+  filter((major_cn + minor_cn) < 10) %>%
+  mutate(chromosome = paste0("chr", gsub("^chr", "", chromosome))) %>%
+  filter(chromosome %in% paste0("chr", 1:22)) %>% 
+  dplyr::select("chromosome", "start", "end", "total_cn", "major_cn", "minor_cn", "sample_id") %>% 
+  mutate(chromosome = sub("^chr", "", chromosome),
+         cnv_group = paste0(major_cn, " + ", minor_cn)) %>% 
+  filter(!(major_cn==0 & minor_cn==0)) %>%
+  filter(!(major_cn==1 & minor_cn==2)) %>%
+  filter(!(major_cn==0 & minor_cn==1))
+
+## NRPCC
+NRPCC <- fread("/Users/wchen20/Desktop/PCAWG/evolution_and_heterogeneity/icgc_sample_annotations_summary_table.txt") %>% 
+  mutate(sample_id = tumour_aliquot_id) %>% 
+  mutate(nrpcc_group = ifelse(nrpcc > 10, "NRPCC > 10", "NRPCC =< 10"),
+         nrpcc_bin = cut(nrpcc, breaks = breaks_seq_nrpcc, include.lowest = TRUE, right = FALSE),
+         purity_bin = cut(purity, breaks = breaks_seq, include.lowest = TRUE, right = FALSE)) %>% 
+  filter(sample_id %in% sample_MSS)
+
+## Combined
+df_merged_NRPCC <- df_snv %>%
+  left_join(cnv_hd, 
+            by = join_by(
+              Tumor_Sample_Barcode == sample_id,
+              Chromosome == chromosome,
+              Start_Position >= start,
+              Start_Position <= end
+            )) %>%
+  mutate(total_cn = as.character(total_cn),
+         total_cn = case_when(major_cn == 1 & minor_cn == 1 ~ "noCNV",
+                              is.na(total_cn) ~ "noCNV",
+                              TRUE ~ total_cn),
+         total_cn = factor(total_cn, levels = c("noCNV", "0", "1", "2", "3", "4", "5", "6", "7", "8","9"))) %>% 
+  left_join(., wgd_median, by = "sample_id") %>%
+  mutate(wgd = ifelse(!is.na(wgd_mediantiming), "WGD", "NonWGD")) %>%
+  filter(!is.na(cnv_group)) %>% 
+  inner_join(., NRPCC, by = "sample_id")
+```
+
+## By Total copy number
+```{r}
+## All uncertainty         
+plot_un <- ggplot(df_merged_NRPCC, aes(x = factor(total_cn), y = hdi_width)) +
+  geom_violin(trim = FALSE, fill = "#00A087", alpha = 0.6) +
+  geom_boxplot(width = 0.1, outlier.shape = NA, fill = "white", alpha = 0.8) +
+  theme_bw() +
+  labs(x = "Total Copy Number", y = "Uncertainty", title = "Distribution of Uncertainty (CI = 0.95)") +
+  theme(
+    axis.text.x = element_text(vjust = 1, size = 14, colour = "black"),
+    axis.text.y = element_text(size = 14, colour = "black"),
+    title = element_text(size = 16),
+    axis.title  = element_text(size = 15),
+    plot.margin = margin(10, 10, 10, 10),
+  )
+
+ggsave(filename = paste0(path_save, "/HDI_uncertainty_cnv.pdf"),
+       plot     = plot_un,
+       width = 12, 
+       height = 4,
+       units    = "in")
+
+### by WGD
+plot_un <- ggplot(df_merged_NRPCC, aes(x = factor(total_cn), y = hdi_width)) +
+  geom_violin(trim = FALSE, fill = "#00A087", alpha = 0.6) +
+  geom_boxplot(width = 0.1, outlier.shape = NA, fill = "white", alpha = 0.8) +
+  facet_wrap(~ wgd, ncol = 1, ) +
+  theme_bw() +
+  labs(x = "Total Copy Number", y = "Uncertainty", title = "Distribution of Uncertainty (CI = 0.95)") +
+  theme(
+    axis.text.x = element_text(vjust = 1, size = 14, colour = "black"),
+    axis.text.y = element_text(size = 14, colour = "black"),
+    axis.title  = element_text(size = 16),
+    title = element_text(size = 16),
+    plot.margin = margin(10, 10, 10, 10),
+    strip.text  = element_text(size = 15),
+  )
+
+ggsave(filename = paste0(path_save, "/HDI_uncertainty_wgd.pdf"),
+       plot     = plot_un,
+       width = 12, 
+       height = 7.5,
+       units    = "in")
+```
+
+# By copy number combinations
+## All CNV
+```{r}
+plot_un <- ggplot(df_merged_NRPCC, aes(x = factor(cnv_group), y = hdi_width)) +
+  geom_violin(trim = FALSE, width = 2, fill = "#00A087", alpha = 0.6) +
+  geom_boxplot(width = 0.1, outlier.shape = NA, fill = "white", alpha = 0.8) +
+  facet_wrap(~ wgd, ncol = 1, ) +
+  theme_bw() +
+  labs(x = "", y = "Uncertainty", title = "Distribution of Uncertainty (CI = 0.95)") +
+  theme(
+    axis.text.x = element_text(vjust = 1, hjust = 1, size = 14, colour = "black", angle = 45),
+    axis.text.y = element_text(size = 14, colour = "black"),
+    axis.title  = element_text(size = 16),
+    title = element_text(size = 16),
+    plot.margin = margin(10, 10, 10, 10),
+    strip.text  = element_text(size = 15),
+  ) +
+  scale_y_continuous(breaks = seq(0, 1, by = 0.2), limits = c(0, 1))
+
+ggsave(filename = paste0(path_save, "/HDI_uncertainty_wgd_cnvcom.pdf"),
+       plot     = plot_un,
+       width = 12, 
+       height = 7.5,
+       units    = "in")
+
+##
+data_plot <- df_merged_NRPCC %>% filter(!cnv_group %in% c("1 + 0", "1 + 1"))
+
+plot_un <- ggplot(
+  data_plot,
+  aes(x = factor(wgd), y = hdi_width, fill = factor(wgd))) +
+  geom_violin(trim = FALSE, alpha = 0.6) +
+  geom_boxplot(
+    width = 0.15,
+    outlier.shape = NA,
+    fill = "white"
+  ) +
+  facet_wrap(~cnv_group, nrow = 2) +
+  stat_compare_means(
+    method = "wilcox.test",
+    label = "p.signif",
+    label.y = 1.05,
+    label.x = 1.3,
+    size = 4
+  ) +
+  theme_bw() +
+  labs(
+    x = "",
+    y = "Uncertainty"
+  ) + 
+  theme(
+    axis.text.x = element_blank(),
+    axis.text.y = element_text(size = 10, colour = "black"),
+    axis.title  = element_text(size = 12),
+    title = element_text(size = 12),
+    plot.margin = margin(10, 10, 10, 10),
+    strip.text  = element_text(size = 12),
+    legend.position = "top"
+  ) + 
+  scale_y_continuous(breaks = seq(0, 1, by = 0.2), limits = c(0, 1.1)) +  
+  scale_fill_manual(values = c("#F39B7F", "#8491B4"),
+                    name = "WGD")
+
+ggsave(filename = paste0(path_save, "/HDI_uncertainty_wgd_cnvcom_wilcox.pdf"),
+       plot     = plot_un,
+       width = 12, 
+       height = 6,
+       units    = "in")
+```
+
+### Samples with WGD timing in 0.4~0.6
+```{r}
+df_merged_sub <- df_merged_NRPCC %>% filter(wgd_mediantiming >= 0.4, wgd_mediantiming <= 0.6)
+check <- df_merged_sub %>% filter(cnv_group == "2 + 0")
+table(check$nrpcc_bin)
+
+sample_check <- df_merged_sub %>% distinct(sample_id, .keep_all = T)
+table(sample_check$nrpcc_bin)
+
+plot_un <- ggplot(df_merged_sub, aes(x = factor(cnv_group), y = hdi_width)) +
+  geom_violin(trim = FALSE,  width = 2, fill = "#00A087", alpha = 0.6) +
+  geom_boxplot(width = 0.1, outlier.shape = NA, fill = "white", alpha = 0.8) +
+  facet_wrap(~ wgd, ncol = 1, ) +
+  theme_bw() +
+  labs(x = "", y = "Uncertainty", title = "Distribution of Uncertainty (CI = 0.95)") +
+  theme(
+    axis.text.x = element_text(vjust = 1, hjust = 1, size = 14, colour = "black", angle = 45),
+    axis.text.y = element_text(size = 14, colour = "black"),
+    axis.title  = element_text(size = 16),
+    title = element_text(size = 16),
+    plot.margin = margin(10, 10, 10, 10),
+    strip.text  = element_text(size = 15),
+  ) + 
+  scale_y_continuous(breaks = seq(0, 1, by = 0.2), limits = c(0, 1)) +
+  geom_hline(yintercept = 0.5, linetype = "dashed", color = "grey60")
+
+ggsave(filename = paste0(path_save, "/HDI_uncertainty_wgd05_cnvcom.pdf"),
+       plot     = plot_un,
+       width = 12, 
+       height = 4,
+       units    = "in")
+
+## X
+plot_un <- ggplot(check, aes(x = factor(nrpcc_bin), y = hdi_width)) +
+  geom_violin(trim = FALSE, width = 1.5, fill = "#00A087", alpha = 0.6) +
+  geom_boxplot(width = 0.1, outlier.shape = NA, fill = "white", alpha = 0.8) +
+  theme_bw() +
+  labs(x = "NRPCC", y = "Uncertainty", title = "Distribution of Uncertainty (CI = 0.95)") +
+  theme(
+    axis.text.x = element_text(vjust = 1, hjust = 1, size = 12, colour = "black", angle = 45),
+    axis.text.y = element_text(size = 12, colour = "black"),
+    axis.title  = element_text(size = 14),
+    title = element_text(size = 16),
+    plot.margin = margin(10, 10, 10, 10),
+    strip.text  = element_text(size = 15),
+  ) + 
+  scale_y_continuous(breaks = seq(0, 1, by = 0.2), limits = c(0, 1)) +
+  geom_hline(yintercept = 0.5, linetype = "dashed", color = "grey60")
+
+ggsave(filename = paste0(path_save, "/HDI_uncertainty_wgd05_cnvcom_nrpcc_x.pdf"),
+       plot     = plot_un,
+       width = 12, 
+       height = 4,
+       units    = "in")
+
+```
+
+## NRPCC
+```{r}
+plot_un <- ggplot(df_merged_NRPCC, aes(x = factor(nrpcc_group), y = hdi_width, fill = factor(nrpcc_group))) +
+  geom_violin(trim = FALSE, alpha = 0.6) +
+  geom_boxplot(width = 0.2, outlier.shape = NA, fill = "white", alpha = 0.8) +
+  scale_y_continuous(breaks = seq(0, 1, by = 0.2), limits = c(0, 1)) +
+  scale_fill_manual(values = c("#00A087", "#E64B35", "#4DBBD5", "#F39B7F", "#8491B4"),
+                    name = "NRPCC Group") +
+  facet_wrap(~ cnv_group, nrow = 1) +
+  theme_bw() +
+  labs(x = "", y = "Uncertainty", title = "Distribution of Uncertainty (CI = 0.95)") +
+  theme(
+    axis.text.x  = element_blank(),
+    axis.text.y  = element_text(size = 14, colour = "black"),
+    axis.title   = element_text(size = 16),
+    title        = element_text(size = 16),
+    plot.margin  = margin(10, 10, 10, 10),
+    strip.text   = element_text(size = 15),
+    legend.position = "top",
+    legend.text = element_text(size = 12)
+  ) +
+  geom_hline(yintercept = 0.5, linetype = "dashed", color = "grey60")
+
+ggsave(filename = paste0(path_save, "/HDI_uncertainty_wgd_cnv_nrpcc.pdf"),
+       plot     = plot_un,
+       width = 20, 
+       height = 5,
+       units    = "in")
+```
+
+# SNV with HDI < 0.5
+```{r}
+## Subset <0.5
+LOH_type <- LOH_type %>% mutate(Tumor_Sample_Barcode = sample_id)
+
+hdi_05 <- hdi_nonsyn %>% filter(hdi_width < 0.5) %>% 
+  inner_join(LOH_type, by = "Tumor_Sample_Barcode")
+
+mut_per_sample <- hdi_05 %>%
+  group_by(Tumor_Sample_Barcode) %>%
+  summarise(
+    histology_abbreviation = first(histology_abbreviation),
+    n_mutations = n(),
+    .groups = "drop"
+  ) %>% 
+  ungroup() %>%
+  mutate(
+    histology_abbreviation = factor(
+      histology_abbreviation,
+      levels = sort(unique(histology_abbreviation))
+    )
+  )
+
+plot_05 <- ggplot(mut_per_sample,
+       aes(x = histology_abbreviation,
+           y = n_mutations,
+           fill = histology_abbreviation)) +
+  geom_boxplot(
+    width = 0.7,
+    outlier.shape = NA,
+    #fill = "grey90",
+    color = "black"
+  ) +
+  geom_jitter(
+    width = 0.2,
+    height = 0,
+    alpha = 0.6,
+    size = 0.5
+  ) +
+  scale_y_log10(
+    breaks = c(1, 10, 100, 1000, 10000),
+    labels = scales::label_number()
+  ) +
+  ylab("Number of SNVs per Sample") + geom_hline(
+    yintercept = 100,
+    linetype = "dashed",
+    color = "black",
+    linewidth = 0.5
+  ) +
+  scale_fill_manual(values = type_colors) +
+  ggtitle("SNVs with Timing Uncertainty < 0.5") +
+  theme_bw() +
+  theme(
+    axis.text.x = element_text(size = 11, color = "black", hjust = 1, vjust = 1, angle = 45),
+    axis.text.y = element_text(size = 11, color = "black"),
+    axis.title.x = element_blank(),
+    plot.title = element_text(size = 16, hjust = 0.5, face = "plain"),
+    panel.grid = element_blank(),
+    axis.line = element_line(color = "black"),
+    axis.ticks = element_line(color = "black"),
+    #axis.title.y = element_blank(),
+    #axis.ticks.y = element_blank(),
+    #axis.line.y = element_blank(),
+    legend.position = "none",
+    plot.margin = margin(t = 10, b = 10, l = 10, r = 10)
+  )
+
+plot_05
+path_save = "/Users/wchen20/Desktop/2026-02-16_Draft/Revision/R1Major5/"
+ggsave(
+  filename = paste0(path_save, "/HDI_uncertainty_05.pdf"),
+  plot     = plot_05,
+  width = 12, 
+  height = 4,
+  units    = "in")
+```

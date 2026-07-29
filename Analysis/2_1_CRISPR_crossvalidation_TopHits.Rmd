@@ -1,0 +1,460 @@
+---
+title: "CRISPR_crossvalidation260220"
+author: "AJ"
+date: "2026-02-20"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# 0. Library packages
+```{r}
+library(openxlsx)
+
+source("/Users/wchen20/Desktop/PCAWG/code/source/CRP_MAGEMSig260220.R")
+```
+
+# 1. MHC regulaters
+## Paths
+```{r}
+path = "/Users/wchen20/Desktop/PCAWG/CRISPR/CRISPRscreen20240118/MHCregulators/"
+path_save = "/Users/wchen20/Desktop/PCAWG/CRISPR/CRISPRscreen20240118/Crossvalidation/MHCregulators/"
+```
+
+## 2019_CancerCell_Burr -- 31564637
+```{r, eval = FALSE}
+# One side -- delete positive regulator
+study <- "2019_CancerCell_Burr"
+cells <- c("HLA", "HLA_B")
+org = "hsa"
+type = "MHC_high"
+
+for (i in c(50, 100, 200)) {
+  
+   CRP_MAGEMSig(cells, study, path, org, 4, type, i, path_save)
+  
+}
+```
+
+## 2021_Immunity_Dersh -- 33271120
+```{r, eval = FALSE}
+cells = c("BJAB", "HBL1", "SUDHL5", "TMD8")
+study <- "2021_Immunity_Dersh"
+org = "hsa"
+type = "MHC"
+
+for (i in c(50, 100, 200)) {
+  
+   CRP_MAGEMSig(cells, study, path, org, 5, type, i, path_save)
+  
+}
+```
+
+## 2023_Cell_Chen -- 37557169
+```{r}
+study <- "2023_Cell_Chen"
+org = "hsa"
+cells = c("HLA_A2_AFP", "HLA_ABC")
+type = "MHC"
+
+
+for (i in c(50, 100, 200)) {
+  
+   CRP_MAGEMSig(cells, study, path, org, 5, type, i, path_save)
+  
+}
+```
+
+## 2019_eLIFE_Pech -- 31452512
+```{r, eval = FALSE}
+study <- "2019_eLIFE_Pech"
+
+cells <- "MHC"
+org <- "hsa"
+type <- "MHC"
+
+for (i in c(50, 100, 200)) {
+  
+   CRP_MAGEMSig(cells, study, path, org, 5, type, i, path_save)
+  
+}
+```
+
+## 2019_CellReport_Freeman -- 31509742
+```{r, eval = FALSE}
+study <- "2019_CellReport_Freeman"
+
+cells <- "MHClow"
+org <- "mmu"
+study <- "2019_CellReport_Freeman"
+type = "MHC_low"
+
+for (i in c(50, 100, 200)) {
+  
+   CRP_MAGEMSig(cells, study, path, org, 4, type, i, path_save)
+  
+}
+```
+
+## 2021_CancerDiscovery_Gu -- 33589424
+```{r}
+study <- "2021_CancerDiscovery_Gu"
+org = "mmu"
+type = "MHC_low"
+cells <- "MHC_low"
+
+for (i in c(50, 100, 200)) {
+  
+   CRP_MAGEMSig(cells, study, path, org, 3, type, i, path_save)
+  
+}
+
+org = "mmu"
+type = "MHC_high"
+cells <- "MHC_high"
+
+for (i in c(50, 100, 200)) {
+  
+   CRP_MAGEMSig(cells, study, path, org, 3, type, i, path_save)
+  
+}
+```
+
+## 2023_NatureCellBiology_Sparbier 36635503
+```{r, eval = FALSE}
+study <- "2023_NatureCellBiology_Sparbier"
+
+org = "hsa"
+type = "MHC_low"
+cells <- "HLA_Blow"
+
+for (i in c(50, 100, 200)) {
+  
+   CRP_MAGEMSig(cells, study, path, org, 4, type, i, path_save)
+  
+}
+
+org = "hsa"
+type = "MHC_high"
+cells <- c("HLA_Bhigh", "HLA_ABChigh")
+
+for (i in c(50, 100, 200)) {
+  
+   CRP_MAGEMSig(cells, study, path, org, 4, type, i, path_save)
+  
+}
+```
+
+# 2. Tcells
+## Paths
+```{r}
+path = "/Users/wchen20/Desktop/PCAWG/CRISPR/CRISPRscreen20240118/Tcells/"
+path_save = "/Users/wchen20/Desktop/PCAWG/CRISPR/CRISPRscreen20240118/Crossvalidation/Tcells/"
+```
+
+## 2019_Cell_Vredevoogd -- 31303383
+```{r}
+type = "Tcells"
+
+study <- "2019_Cell_Vredevoogd"
+cells <- c("IFNGR1deficient_D10_A", "IFNGR1deficient_D10_B")
+org = "hsa"
+
+
+for (i in c(50, 100, 200)) {
+  
+   CRP_MAGEMSig(cells, study, path, org, 5, type, i, path_save)
+  
+}
+```
+
+## 2020_Nature_Lawson -- 32968282
+```{r}
+study <- "2020_Nature_Lawson"
+org = "mmu"
+type ="Tcells"
+
+cells <- getSheetNames(paste0(path,"/", study ,"/Paper/Table_S2_mTKO_normreadcounts.xlsx"))
+
+for (i in c(50, 100, 200)) {
+  
+   CRP_MAGEMSig(cells, study, path, org, 5, type, i, path_save)
+  
+}
+```
+
+## 2020_ScienceImmunology_Young -- 33443027
+```{r, eval = FALSE}
+study = "2020_ScienceImmunology_Young"
+cells = "MC38"
+org = "mmu"
+type = "Tcells"
+
+for (i in c(50, 100, 200)) {
+  
+   CRP_MAGEMSig(cells, study, path, org, 5, type, i, path_save)
+  
+}
+```
+
+## 2018_ScienceImmunology_Kearney -- 29776993
+```{r, eval = FALSE}
+study <- "2018_ScienceImmunology_Kearney"
+cells <- c("B16_OTI", "B16_perforin_OTI", "MC38_IgG_OTI", "MC38_perforinko_OTI")
+org = "mmu"
+type = "Tcells"
+
+for (i in c(50, 100, 200)) {
+  
+   CRP_MAGEMSig(cells, study, path, org, 6, type, i, path_save)
+  
+}
+```
+
+## 2017_Nature_Patel -- 28783722
+```{r, eval = FALSE}
+study <- "2017_Nature_Patel"
+cells <- c("Mel624")
+org = "hsa"
+type = "Tcells"
+
+for (i in c(50, 100, 200)) {
+  
+   CRP_MAGEMSig(cells, study, path, org, 6, type, i, path_save)
+  
+}
+```
+
+## 2023_CancerDiscovery_Ito -- 36811466
+```{r, eval = FALSE}
+study = "2023_CancerDiscovery_Ito"
+cells = c("B16_OT1")
+org = "mmu"
+type = "Tcells"
+
+for (i in c(50, 100, 200)) {
+  
+   CRP_MAGEMSig(cells, study, path, org, 5, type, i, path_save)
+  
+}
+```
+
+## 2018_Science_Pan -- 29301958
+```{r, eval = FALSE}
+study = "2018_Science_Pan"
+cells = c("B16_OT_I", "B16_Pmel_1")
+org = "mmu"
+type = "Tcells"
+
+for (i in c(50, 100, 200)) {
+  
+   CRP_MAGEMSig(cells, study, path, org, 7, type, i, path_save)
+  
+}
+```
+
+## 2022_CellReportMedicine_Zhang -- 35688159
+```{r, eval = FALSE}
+study = "2022_CellReportMedicine_Zhang"
+cells = c("D10_T")
+org = "hsa"
+type = "Tcells"
+
+for (i in c(50, 100, 200)) {
+  
+   CRP_MAGEMSig(cells, study, path, org, 5, type, i, path_save)
+  
+}
+```
+
+## 2022_NatureCommunication_Frey -- 35379808
+```{r, eval = FALSE}
+study = "2022_NatureCommunication_Frey"
+cells = c("KPC_OTI")
+org = "mmu"
+type = "Tcells"
+
+for (i in c(50, 100, 200)) {
+  
+   CRP_MAGEMSig(cells, study, path, org, 5, type, i, path_save)
+  
+}
+```
+
+# 3. NK cell killing
+## Paths
+```{r}
+path = "/Users/wchen20/Desktop/PCAWG/CRISPR/CRISPRscreen20240118/NKcells/"
+path_save = "/Users/wchen20/Desktop/PCAWG/CRISPR/CRISPRscreen20240118/Crossvalidation/NKcells/"
+```
+
+## 2019_eLIFE_Pech -- 31452512
+```{r, eval = FALSE}
+cells = "K562"
+org = "hsa"
+study = "2019_eLIFE_Pech"
+type = "NK"
+
+for (i in c(50, 100, 200)) {
+  
+   CRP_MAGEMSig(cells, study, path, org, 5, type, i, path_save)
+  
+}
+```
+
+## 2021_NatureGenetics_Sheffer -- 34253920
+```{r, eval = FALSE}
+cells <- c("HT29", "SW620", "HCT15")
+org <- "hsa"
+study <- "2021_NatureGenetics_Sheffer"
+type = "NK"
+
+for (i in c(50, 100, 200)) {
+  
+   CRP_MAGEMSig(cells, study, path, org, 5, type, i, path_save)
+  
+}
+```
+
+## 2019_CellReport_Freeman -- 31509742
+```{r, eval = FALSE}
+### (control vs. treatment)
+cells <- "B16_F10"
+org = "mmu"
+study = "2019_CellReport_Freeman"
+type = "NK"
+
+for (i in c(50, 100, 200)) {
+  
+   CRP_MAGEMSig(cells, study, path, org, 5, type, i, path_save)
+  
+}
+```
+
+## 2018_ScienceImmunology_Kearney -- 29776993
+```{r, eval = FALSE}
+cells <- c("MC38_NK")
+org = "mmu"
+study = "2018_ScienceImmunology_Kearney"
+type = "NK"
+
+for (i in c(50, 100, 200)) {
+  
+   CRP_MAGEMSig(cells, study, path, org, 6, type, i, path_save)
+  
+}
+```
+
+## 2022_CellReportMedicine_Zhang -- 35688159
+```{r, eval = FALSE}
+study = "2022_CellReportMedicine_Zhang"
+cells = c("D10_NK")
+org = "hsa"
+type = "NK"
+
+for (i in c(50, 100, 200)) {
+  
+   CRP_MAGEMSig(cells, study, path, org, 5, type, i, path_save)
+  
+}
+```
+
+## 2024_CELLREPORT_Zhuang
+```{r}
+study = "2024_CELLREPORT_Zhuang"
+cells = c("221")
+org = "hsa"
+type = "NKcells"
+
+for (i in c(50, 100, 200)) {
+  
+   CRP_MAGEMSig(cells, study, path, org, 5, type, i, path_save)
+  
+}
+```
+
+## 2022_NC_Bernareggi
+```{r}
+study = "2022_NC_Bernareggi"
+cells = c("GSC_387", "GSC_1517", "GSC_CW468", "GSC_D456")
+org = "hsa"
+type = "NKcells"
+  
+for (i in c(50, 100, 200)) {
+  
+   CRP_MAGEMSig(cells, study, path, org, 5, type, i, path_save)
+  
+}
+```
+
+## 2024_CELL_Li
+```{r}
+study = "2024_CELL_Li"
+cells = c("COLO205_NK")
+org = "hsa"
+type = "NKcells"
+
+for (i in c(50, 100, 200)) {
+  
+   CRP_MAGEMSig(cells, study, path, org, 5, type, i, path_save)
+  
+}
+```
+
+# 4. Macrophage killing
+## Paths
+```{r}
+path = "/Users/wchen20/Desktop/PCAWG/CRISPR/CRISPRscreen20240118/Macrophages/"
+path_save = "/Users/wchen20/Desktop/PCAWG/CRISPR/CRISPRscreen20240118/Crossvalidation/Macrophages/"
+```
+
+## 2021_Nature_Kamber -- 34497417
+```{r, eval = FALSE}
+cells <- "Ramos_macrophage"
+org = "hsa"
+study = "2021_Nature_Kamber"
+type = "Macrophage"
+
+for (i in c(50, 100, 200)) {
+  
+   CRP_MAGEMSig(cells, study, path, org, 5, type, i, path_save)
+  
+}
+```
+
+## 2026_Science_Chung
+```{r}
+cells <- c("MOLM13_macrophage", "MV411_macrophage")
+org = "hsa"
+study = "2026_Science_Chung"
+type = "Macrophage"
+
+for (i in c(50, 100, 200)) {
+  
+   CRP_MAGEMSig(cells, study, path, org, 8, type, i, path_save)
+  
+}
+```
+
+# 5. Gammadelta killing
+## Paths
+```{r}
+path = "/Users/wchen20/Desktop/PCAWG/CRISPR/CRISPRscreen20240118/GammadeltaTcells/"
+path_save = "/Users/wchen20/Desktop/PCAWG/CRISPR/CRISPRscreen20240118/Crossvalidation/GammadeltaTcells/"
+```
+
+## 2023_Nature_Mamedov -- 37648854 - negative should be checked
+```{r, eval = FALSE}
+cells <- "Daudi_Gammadelta"
+org = "hsa"
+study = "2023_Nature_Mamedov"
+type = "Gammadelta"
+
+for (i in c(50, 100, 200)) {
+  
+   CRP_MAGEMSig(cells, study, path, org, 5, type, i, path_save)
+  
+}
+```

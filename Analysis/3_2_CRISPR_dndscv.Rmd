@@ -1,0 +1,230 @@
+---
+title: "R2Major3"
+author: "AJ"
+date: "2026-03-18"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# 1. Load Packages
+```{r}
+rm(list = ls())
+
+suppressMessages(library("dndscv"))
+suppressMessages(library("data.table"))
+suppressMessages(library("dplyr"))
+suppressMessages(library("readr"))
+suppressMessages(library("tidyr"))
+suppressMessages(library("stringr"))
+suppressMessages(library("ggplot2"))
+suppressMessages(library("patchwork"))
+
+source("/Users/wchen20/Desktop/PCAWG/code/source/basic.R")
+source("/Users/wchen20/Desktop/PCAWG/code/source/plot_dnnsall.R")
+
+PCAWG_path <- "/rsrch6/scratch/hema_bio-Malignan/wchen20/PCAWG"
+PCAWG_path <- "/Users/wchen20/Desktop/PCAWG"
+figure_path <- "/Users/wchen20/Desktop/PCAWG/Figures/20240827/"
+
+LOH_MSI = LOH_mut <- fread(paste0(PCAWG_path, "/donors_and_biospecimens/LOH_MSI_final.csv"))
+LOH_type <- LOH_MSI %>% mutate(sample_id = aliquot_id) %>% dplyr::select(sample_id, histology_abbreviation)
+LOH_aliquot <- LOH_MSI %>% mutate(sample_id = aliquot_id) %>% dplyr::select(sample_id, icgc_sample_id, MSI_mut)
+LOH_MSS <- LOH_MSI %>% filter(MSI_mut == "MSS")
+sample_MSS <- LOH_MSS  %>% pull(aliquot_id)
+
+sample_MSS <- LOH_MSS %>% pull(aliquot_id)
+sample_tcgaMSS <- LOH_MSI %>% filter(proj == "tcga", MSI_mut == "MSS") %>% pull(aliquot_id)
+
+rename_list <- fread("/Users/wchen20/Desktop/PCAWG/CRISPR/CRISPRscreen20240118/rename_list.csv")
+rename_list$pathway <- str_to_title(rename_list$pathway)
+
+date <- "250807"
+dNdScv_dir <- paste0("/Users/wchen20/Desktop/PCAWG/MHC_evolution/DNDS/dNdScv/dNdScvAPM/", date, "/")
+dNdScv_input <- "/Users/wchen20/Desktop/PCAWG/MHC_evolution/DNDS/dNdScv/250807/mutations_dNdScv_updated_withsynHLA.txt"
+figure_path <- "/Users/wchen20/Desktop/PCAWG/Figures/20250818/"
+
+rename_list <- fread("/Users/wchen20/Desktop/PCAWG/CRISPR/CRISPRscreen20240118/rename_list.csv")
+rename_list$pathway <- str_to_title(rename_list$pathway)
+```
+
+# 2. Prepare input for dNdScv
+```{r pressure, echo=FALSE} 
+## DN/DS
+non_syn <- c("Frame_Shift_Del", "Frame_Shift_Ins", "Splice_Site", "Translation_Start_Site", "Nonsense_Mutation", 
+             "Nonstop_Mutation", "In_Frame_Del", "In_Frame_Ins", "Missense_Mutation")
+
+## MAF from VCF
+pcawgmaf_input <- "/rsrch6/scratch/hema_bio-Malignan/wchen20/PCAWG/consensus_snv_indel/maf_from_vcf/maf_pcawg_vcf.maf"
+maf_out <- "/rsrch6/scratch/hema_bio-Malignan/wchen20/PCAWG/consensus_snv_indel/maf_from_vcf/"
+data <- fread(pcawgmaf_input)
+dim(data)
+
+## maf without all nonsyn HLA mutations
+hla_genes <- c("HLA-A", "HLA-B", "HLA-C")
+
+## dNdScv without all nonsyn HLA mutations
+data_noHLAnonsyn <- fread(paste0(maf_out, "/maf_pcawg_vcf_noHLA.maf"))
+mutations <- data_noHLAnonsyn %>% select(Tumor_Sample_Barcode, Chromosome, Start_Position, Tumor_Seq_Allele1, Tumor_Seq_Allele2)
+names(mutations) <- c("sampleID", "chr", "pos", "ref", "mut")
+write.table(mutations, file = paste0(maf_out, "/mutations_dNdScvnoHLAnonsyn.txt"), sep = "\t", row.names = FALSE, quote = FALSE)
+
+## Samples with consensus HLA mutations
+data_HLA <- fread(paste0(maf_out, "/maf_pcawg_vcf_nonsyn_consensusHLA.maf")) %>% 
+distinct(Hugo_Symbol, Variant_Classification, .keep_all = TRUE) %>% 
+mutate(Start_position_dnds = Start_Position, 
+       End_position_dnds = End_Position,
+       Tumor_Seq_Allele1_dnds = Tumor_Seq_Allele1, 
+       Tumor_Seq_Allele2_dnds = Tumor_Seq_Allele2) %>%
+dplyr::select(Hugo_Symbol, Variant_Classification, Start_position_dnds, End_position_dnds,Tumor_Seq_Allele1_dnds, Tumor_Seq_Allele2_dnds) 
+
+## dNdScv without polysolver
+path_poly = "/rsrch6/scratch/hema_bio-Malignan/wchen20/PCAWG/MHC_evolution/HLAmutation/results/"
+HLAmut_icgc <- fread(paste0(path_poly, "/maf_icgc_HLAmut_final.maf"))
+HLAmut_tcga <- fread(paste0(path_poly, "/maf_tcga_HLAmut_final.maf"))
+
+HLAmut_pcawg <- rbind(HLAmut_icgc, HLAmut_tcga, fill= TRUE) %>% 
+left_join(.,data_HLA, by = c("Hugo_Symbol", "Variant_Classification")) %>%
+mutate(Start_Position = ifelse(!is.na(Start_position_dnds), Start_position_dnds, Start_Position),
+       End_position = ifelse(!is.na(End_position_dnds), End_position_dnds, End_Position),
+       Tumor_Seq_Allele1 = ifelse(!is.na(Tumor_Seq_Allele1_dnds), Tumor_Seq_Allele1_dnds, Tumor_Seq_Allele1), 
+       Tumor_Seq_Allele2 = ifelse(!is.na(Tumor_Seq_Allele2_dnds), Tumor_Seq_Allele2_dnds, Tumor_Seq_Allele2)) %>% 
+       select(Tumor_Sample_Barcode, Chromosome, Start_Position, Tumor_Seq_Allele1, Tumor_Seq_Allele2)
+names(HLAmut_pcawg) <- c("sampleID", "chr", "pos", "ref", "mut")
+write.table(HLAmut_pcawg, file = paste0(maf_out, "/mutations_dNdScvPloyHLA.txt"), sep = "\t", row.names = FALSE, quote = FALSE)
+
+mutations_all <- rbind(mutations, HLAmut_pcawg)
+write.table(mutations_all, file = paste0(maf_out, "/mutations_dNdScv_updated_withsynHLA.txt"), sep = "\t", row.names = FALSE, quote = FALSE)
+```
+
+# 3. Pathways - terminal without driver
+```{sh}
+dNdScv_input="/Users/wchen20/Desktop/PCAWG/MHC_evolution/DNDS/dNdScv/250807/mutations_dNdScv_updated_withsynHLA.txt"
+date="260318"
+path_crispr="/Users/wchen20/Desktop/2026-02-16_Draft/Revision/R1Major2/005/"
+path_save="/Users/wchen20/Desktop/2026-02-16_Draft/Revision/R2Major3/DNDS"
+mode="single"
+mode="all"
+
+nohup Rscript ~/Desktop/PCAWG/code/source/dNdS_nodriver_terminal.R -d ${date} \
+                                                                 -i ${dNdScv_input} \
+                                                                 -c ${path_crispr} \
+                                                                 -s ${path_save} \
+                                                                 -m ${mode} &
+```
+
+# 4. Pathways - terminal with driver
+```{sh}
+dNdScv_input="/Users/wchen20/Desktop/PCAWG/MHC_evolution/DNDS/dNdScv/250807/mutations_dNdScv_updated_withsynHLA.txt"
+date="260318"
+path_crispr="/Users/wchen20/Desktop/2026-02-16_Draft/Revision/R1Major2/005/"
+path_save="/Users/wchen20/Desktop/2026-02-16_Draft/Revision/R2Major3/DNDS"
+mode="single"
+#mode="all"
+
+nohup Rscript ~/Desktop/PCAWG/code/source/dNdS_withdriver_terminal.R -d ${date} \
+                                                                 -i ${dNdScv_input} \
+                                                                 -c ${path_crispr} \
+                                                                 -s ${path_save} \
+                                                                 -m ${mode} &
+```
+
+# 5. Summary
+## 5.1 DNDS for all genes
+```{r}
+source("/Users/wchen20/Desktop/PCAWG/code/source/plot_dnnsall.R")
+modes = c("single", "all")
+modes=c("all")
+
+cell_types <- c("Tcells", "MHCregulators", "NKcells", "Macrophages", "GammadeltaTcells")
+
+for (var in c("with_driver", "no_frequentdriver")) {
+   
+  path_results <- paste0("/Users/wchen20/Desktop/2026-02-16_Draft/Revision/R2Major3/DNDS/260318/all/", var, "/")
+  
+  for (cell_type in cell_types) {
+    
+    for (mode in modes) {
+      
+    #CRISPR_path <- paste0("/Users/wchen20/Desktop/PCAWG/CRISPR/CRISPRscreen20240118/", cell_type)
+    
+    dnds_path <- paste0(path_results, "/", cell_type, "/")
+    
+    file_list <- list.files(path = dnds_path, pattern = ".*globaldnds.*", recursive = FALSE, full.names = TRUE)
+    
+    df_list <- list()
+    
+    for (file in file_list) {
+      file_name <- basename(file)
+      file_name <- gsub("globaldnds_", "", file_name)
+      file_name <- gsub("GOBP", "", file_name)
+      file_name <- gsub(".csv", "", file_name)
+      file_name <- gsub("all_", "", file_name)
+      
+      dnds <- fread(file) %>% mutate(file = file_name)
+      df_list[[file_name]] <- dnds
+    } 
+    
+    if (mode == "all") {
+      
+      dnds_df <-  rbindlist(df_list, fill = TRUE) %>% 
+        filter(is.finite(cilow), cilow != 0, is.finite(cihigh), cihigh != 0) %>%
+        tidyr::separate(file, into = c("cell_type", "regulator", "pathway"), extra = "merge", fill = "right") %>%
+        mutate(pathway = str_to_title(pathway)) %>%
+        inner_join(., rename_list, by = "pathway") %>% 
+        mutate(pathway = pathway_new,
+               reg = ifelse(regulator== "pos", "Positive", "Negative"),
+               MLE = log2(mle),
+               upper = log2(cihigh),
+               lower = log2(cilow),
+               sig = ifelse((MLE > 0 & upper > 0 & lower > 0) | (MLE < 0 & upper < 0 & lower < 0), "true", "false"),
+               Type = name) 
+      write_csv(dnds_df, paste0(path_results, "/all_",cell_type, ".csv"))
+      
+      pathway_order <- dnds_df %>% arrange(desc(reg)) %>% pull(pathway) %>% unique()
+      dnds_df$pathway <- factor(dnds_df$pathway, pathway_order)
+      
+      dnds_list <- dnds_df %>% filter(sig == "true", name == "wall") %>% pull(pathway_new) %>% unique()
+      
+      if (cell_type == "NKcells") {
+        
+        dnds_sig <- dnds_df %>% filter(pathway_new %in% dnds_list) %>% 
+          mutate(pathway_new = sapply(pathway_new, insert_newlines_every_five_words2))
+        
+      } else {
+        
+        dnds_sig <- dnds_df %>% filter(pathway_new %in% dnds_list) %>% 
+          mutate(pathway_new = sapply(pathway_new, insert_newlines_every_five_words))
+      }
+     
+      dNdScvsig_plot <- plot_dnnsall(dnds_sig)
+      
+      ggsave(filename = paste0(path_results, "/dNdScv_", cell_type, ".pdf"), plot = dNdScvsig_plot,  width = 4, height = 2.5, units = "in")
+      
+      
+    } else {
+      
+      dnds_df <-  rbindlist(df_list, fill = TRUE) %>% 
+        filter(is.finite(cilow), cilow != 0, is.finite(cihigh), cihigh != 0) %>%
+        tidyr::separate(file, into = c("cancer_type", "cell_type", "regulator", "pathway"), sep = "_", extra = "merge", fill = "right") %>%
+        mutate(pathway = str_to_title(pathway)) %>%
+        inner_join(., rename_list, by = "pathway") %>% 
+        mutate(pathway = pathway_new,
+               reg = ifelse(regulator== "pos", "Positive", "Negative"),
+               MLE = log2(mle),
+               upper = log2(cihigh),
+               lower = log2(cilow),
+               sig = ifelse((MLE > 0 & upper > 0 & lower > 0) | (MLE < 0 & upper < 0 & lower < 0), "true", "false"),
+               Type = name) 
+      write_csv(dnds_df, paste0(path_results, "/dndsall_",cell_type, ".csv"))
+      
+    }
+    
+    }
+  
+  }
+  
+}
+```

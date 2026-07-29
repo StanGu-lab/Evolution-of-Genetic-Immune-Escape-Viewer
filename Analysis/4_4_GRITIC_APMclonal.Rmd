@@ -1,0 +1,150 @@
+---
+title: "2_GRITIC_APMclonal"
+author: "AJ"
+date: "2025-08-04"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# 0. Load packacges
+```{r}
+rm(list = ls())
+
+library("stringr")
+library("dplyr")
+library("patchwork")
+library("ggpubr")
+library("ggridges")
+library("truncnorm")
+library("tidyr")
+library("scatterpie")
+library("tidyselect")
+library("pillar")
+library("data.table")
+library("readr")
+library("ggplot2")
+library("openxlsx")
+library("ggrepel")
+library("tibble")
+library("textshape")
+library("matrixStats")
+
+source("/Users/wchen20/Desktop/PCAWG/code/source/basic.R")
+#source("/Users/wchen20/Desktop/PCAWG/code/source/EnrichedView_modified.R")
+#source("/Users/wchen20/Desktop/PCAWG/code/source/CRP_MAGEMSig0409.R")
+source("/Users/wchen20/Desktop/PCAWG/code/source/insert_newlines.R")
+#source("/Users/wchen20/Desktop/PCAWG/code/source/Plot_ttest.R")
+source("/Users/wchen20/Desktop/PCAWG/code/source/plot_segTiming.R")
+#source("/Users/wchen20/Desktop/PCAWG/code/source/plot_raincloud.R")
+
+## Path
+PCAWG_path <- "/rsrch6/scratch/hema_bio-Malignan/wchen20/PCAWG"
+PCAWG_path <- "/Users/wchen20/Desktop/PCAWG"
+gritic_path <- paste0(PCAWG_path, "/MHC_evolution/GRITIC/output")
+
+## Clinical data
+LOH_MSI = LOH_mut <- fread(paste0(PCAWG_path, "/donors_and_biospecimens/LOH_MSI_final.csv"))
+
+LOH_type <- LOH_MSI %>% mutate(sample_id = aliquot_id) %>% dplyr::select(sample_id, histology_abbreviation)
+LOH_aliquot <- LOH_MSI %>% mutate(sample_id = aliquot_id) %>% dplyr::select(sample_id, icgc_sample_id, MSI_mut)
+sample_MSS <- LOH_MSI %>% filter(MSI_mut == "MSS") %>% pull(aliquot_id)
+
+## Timing of segment gain
+seg <- fread(paste0(PCAWG_path, "/MHC_evolution/GRITIC/output/SNV_timing/wenjie_posterior_pcawg.tsv"))
+
+## Timing of WGD
+wgd_median <- fread("/Users/wchen20/Desktop/PCAWG/MHC_evolution/GRITIC/output/wgd_median.csv") %>% dplyr::select(wgd_mediantiming, sample_id)
+
+## Timing of non-synonymous mutations
+nonsyn_filter_nonPloy <- fread("/Users/wchen20/Desktop/PCAWG/MHC_evolution/GRITIC/output/filter/griticnon_filterclonal.tsv") %>%
+  dplyr::select(-matches("\\.y$"), -Sample) %>%
+  rename_with(~ str_replace_all(., "\\.x$", "")) %>% 
+  filter(sample_id %in% sample_MSS)
+
+## Save Path
+gritic_path = "/Users/wchen20/Desktop/PCAWG/MHC_evolution/GRITIC/output/250717/summary250717/"
+path_timeline = "/Users/wchen20/Desktop/PCAWG/MHC_evolution/GRITIC/output/250717/summary250717/timeline/"
+figure_path  = "/Users/wchen20/Desktop/PCAWG/Figures/20250808/"
+```
+
+# Set Path
+```{r}
+path_figure <- "/Users/wchen20/Desktop/2026-02-16_Draft/Revision_Figures/Original_output/"
+
+gritic_path = "/Users/wchen20/Desktop/2026-02-16_Draft/Final_Results/8_MutationTiming/min_drivermutation_250/"
+path_timeline = "/Users/wchen20/Desktop/2026-02-16_Draft/Final_Results/8_MutationTiming/timeline/"
+```
+
+# 1. APM point mutations
+```{r cars}
+## Clonal/subclonal APM
+nonsyn_filter <- fread(paste0(gritic_path, "/nonsyn_filter_diff.csv"))
+
+## Select clonal/subclonal APM
+timing_APM <- nonsyn_filter %>% 
+  filter(!is.na(X0)) %>% 
+  filter(Tumor_Sample_Barcode %in% sample_MSS) %>%
+  filter(Tumor_Sample_Barcode %in% sample_sucess) %>%
+  filter(Hugo_Symbol %in% APM) %>%
+  mutate(subclonal_ratio = rowMeans(dplyr::select(., all_of(column_names)) == 1.01, na.rm = TRUE),
+         timing_gritic = ifelse(subclonal_ratio > 0.5, "subclonal", "clonal"),
+         sample_id = Tumor_Sample_Barcode) 
+
+## Selected
+timing_APMsample <- unique(timing_APM$sample_id)
+timing_APMselected <- timing_APM %>% dplyr::select(histology_abbreviation, sample_id, timing_gritic, all_of(column_names))
+
+## APM_MSS
+timing_APMMSS <- timing_APM 
+as.data.frame(table(timing_APMMSS$timing_gritic))
+
+## Clonal and subclonal
+clone <- timing_APMselected %>% filter(timing_gritic != "subclonal")
+# write.csv(clone, file = paste0(gritic_path,"/APM_clone.csv"), row.names = F)  
+# nrow(clone)
+# nrow(clone)/nrow(timing_APMselected)
+
+subclone <- timing_APMselected %>% filter(timing_gritic == "subclonal")
+# write.csv(subclone, file = paste0(gritic_path,"/APM_subclone.csv"), row.names = F)
+
+subcloneMSS <- timing_APMMSS %>% filter(timing_gritic == "subclonal")
+# write.csv(subcloneMSS, file = paste0(gritic_path,"/APM_subcloneMSS.csv"), row.names = F)
+# nrow(subcloneMSS)
+# nrow(subcloneMSS)/nrow(timing_APMMSS)
+```
+
+## 2. Clonal/Subclonal APM frequenies -- MSS
+```{r}
+LOH_MSS <- LOH_MSS %>% filter(aliquot_id %in% sample_sucess)
+
+# Generate the frequencies for each cancer type
+subclone_sum <- as.data.frame(table(LOH_MSS$histology_abbreviation)) %>% mutate(mut_type = "subclonal")
+names(subclone_sum) <- c("histology_abbreviation", "sum", "mut_type")
+
+clone_sum <- as.data.frame(table(LOH_MSS$histology_abbreviation)) %>% mutate(mut_type = "clonal")
+names(clone_sum) <- c("histology_abbreviation", "sum", "mut_type")
+
+freq_sum <- rbind(subclone_sum, clone_sum)
+
+# Frequencies for clonal/subclonal APM
+subclone_sample <- subcloneMSS %>% distinct(sample_id, .keep_all = TRUE)
+subclone_freq <- as.data.frame(table(subclone_sample$histology_abbreviation)) %>% mutate(mut_type = "subclonal")
+
+clone_sample <- cloneMSS %>% distinct(sample_id, .keep_all = TRUE)
+clone_freq <- as.data.frame(table(clone_sample$histology_abbreviation)) %>% mutate(mut_type = "clonal")
+
+freq <- rbind(clone_freq, subclone_freq)
+names(freq) <- c("histology_abbreviation", "sum_sub", "mut_type")
+#write.csv(freq, file = paste0(gritic_path,"/APMtimingMSS_freq.csv"), row.names = F)
+
+type_APM = unique(clone$histology_abbreviation)
+
+freq_all <- left_join(freq_sum, freq, by = c("histology_abbreviation", "mut_type")) %>% 
+  mutate(freq = sum_sub/sum) %>% 
+  filter(histology_abbreviation %in% type_APM) %>% 
+  mutate(type = factor(histology_abbreviation, levels = sort(unique(histology_abbreviation), decreasing = TRUE)))
+#write.csv(freq_all, file = paste0(gritic_path,"/APMtimingMSS_freqall.csv"), row.names = F)
+```

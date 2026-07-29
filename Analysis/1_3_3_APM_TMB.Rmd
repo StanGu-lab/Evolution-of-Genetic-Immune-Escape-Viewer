@@ -9,7 +9,7 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-# Library packages
+# 0. Library packages
 ```{r cars}
 rm(list = ls())
 
@@ -34,76 +34,35 @@ suppressMessages(library("ggdist"))
 
 color_event <- c("Mut" = "#E64B35FF", "WT" = "#4DBBD5FF")
 color_APM_envet <- c("APM-Mutant" = "#E64B35FF", "APM-WT" = "#4DBBD5FF")
-figure_path <- ".../Project/Figures/20250813/"
-path_tmb <- ".../Project/MHC_evolution/TMB/250813/"
+figure_path <- "/Users/wchen20/Desktop/PCAWG/Figures/20250813/"
+path_tmb <- "/Users/wchen20/Desktop/PCAWG/MHC_evolution/TMB/250813/"
 ```
 
-# TMB
-```{r pressure, echo=FALSE}
-path_maf <- ".../Project/consensus_snv_indel/maf/maf_from_vcf/"
+# Set path
+```{r}
+path_figure <- "/Users/wchen20/Desktop/2026-02-16_Draft/Revision_Figures/Original_output/"
 
-mat1 <- fread(paste0(path_maf, "/onco_APM_hlaloh.txt")) %>% 
-  column_to_rownames("V1") %>% 
-  as.matrix()
+path_TMB <- "/Users/wchen20/Desktop/2026-02-16_Draft/Final_Results/2_TMB/"
+```
 
-long_df <- as.data.frame(mat1) %>%
-  rownames_to_column("Gene") %>%
-  pivot_longer(-Gene, names_to = "aliquot_id", values_to = "Status") %>%
-  filter(Status != "") %>%         # only keep mutated entries
-  mutate(APM_Event = "APM-Mutant") %>% 
-  distinct(aliquot_id, .keep_all = T) %>% dplyr::select("aliquot_id", "APM_Event")
+# Update TMB
+```{r}
+load("/rsrch6/scratch/hema_bio-Malignan/wchen20/PCAWG/consensus_snv_indel/pcawg_HLAupdateMSS.RData")
+number_mutations <- mutCountMatrix(pcawg_MSS, includeSyn = TRUE, countOnly = NULL, removeNonMutated = FALSE)
+number_mutations <- as.data.frame(number_mutations)
+number_mutations$gene <- rownames(number_mutations)
+write.csv(number_mutations, file = "/rsrch6/scratch/hema_bio-Malignan/wchen20/PCAWG/consensus_snv_indel/pcawg_HLAupdateMSS_num_mutations.csv", row.names = F)
+```
 
-HLALOH_pcawg <- fread(".../Project/donors_and_biospecimens/LOH_MSI_final.csv") %>% 
-  subset(MSI_mut == "MSS") %>% 
-  left_join(., long_df, by = "aliquot_id") %>% 
-  mutate(APM_Event = ifelse(!is.na(APM_Event), "APM-Mutant", "APM-WT"),
-         APM_Event = factor(APM_Event, levels = c("APM-WT", "APM-Mutant"))) 
-table(HLALOH_pcawg$APM_Event)
+# Divide TMB by human genome length
+```{r}
+data <- fread(paste0(path_TMB, "/pcawg_HLAupdateMSS_num_mutations.csv")) %>% 
+  dplyr::select(-gene) %>% t(.)
 
-# pancan_pcawg_2020_clinical_data.tsv was downloaded from the "Clinical Data" page.
-TMB_cbio <- fread(".../Project/clinical/pancan_pcawg_2020_clinical_data.tsv") %>% 
-  mutate(cibio_perMB = `TMB (nonsynonymous)`,
-         cibio_perMB_log = log10(cibio_perMB),
-         `icgc_specimen_id` = `Sample ID`)
+result <- data.frame(
+  aliquot_id = rownames(data),
+  total_mutation = rowSums(data)
+) %>% mutate(mutation_perMB = total_mutation/3000)
 
-#LOH_MSIpcawg_check <- inner_join(HLALOH_pcawg, TMB_cbio, by = "icgc_specimen_id")
-
-select_type = c("Breast-AdenoCA", "ColoRect-AdenoCA", "Lymph-BNHL", "Liver-HCC", "Panc-AdenoCA", "Skin-Melanoma")
-
-LOH_MSIpcawg <- HLALOH_pcawg %>%
-  filter(MSI_mut == "MSS") %>%
-  group_by(histology_abbreviation) %>%
-  mutate(distinct_count = n_distinct(APM_Event)) %>%
-  filter(distinct_count > 1) %>%
-  ungroup() %>%
-  left_join(., TMB_cbio, by = "icgc_specimen_id") %>% 
-  filter(histology_abbreviation %in% select_type)
-
-y_max <- max(LOH_MSIpcawg$cibio_perMB_log, na.rm = TRUE)
-
-plot_TMB <- ggplot(LOH_MSIpcawg, aes(x = histology_abbreviation, y = cibio_perMB_log, fill = APM_Event)) +
-         geom_violin(trim = FALSE, scale = "width", color = NA) +
-         scale_fill_manual(values = color_APM_envet) +
-         theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1, size = 16, colour = "black"),
-               axis.text.y = element_text(size = 16, colour = "black"),
-               axis.title.y = element_text(size = 16, margin = margin(r = 20)),
-         title = element_text(size = 16),
-         plot.margin = margin(t = 5, l = 20, r = 20, b = 10),
-         legend.text = element_text(size = 10), 
-         legend.title = element_text(size = 10),
-         legend.key.size = unit(0.5, "cm"), 
-         legend.spacing.x = unit(0.2, "cm"),     
-         panel.grid.major = element_blank(),
-         panel.grid.minor = element_blank(),
-         panel.background = element_blank(),
-         axis.line = element_line(color = "black"),
-         axis.ticks = element_line(color = "black"),
-         legend.position = "top") + 
-  scale_y_continuous(breaks = log10(c(0.1, 1, 10, 100, 1000, 10000)), 
-                     labels = c(0.1, 1, 10, 100, 1000, 10000)) + 
-  labs(x = "", y = "TMB", fill = "APM Events") +
-  ggtitle("") + 
-  stat_compare_means(aes(group = APM_event), method = "wilcox.test", label = "p.signif", size = 7)
-
-ggsave(filename = paste0(path_tmb, "/Figure1c.pdf"), plot = plot_TMB, width = 10, height = 5, units = "in")
+write.csv(result, file = paste0(path_TMB, "/pcawg_HLAupdateMSS_TMB.csv"), row.names = F)
 ```

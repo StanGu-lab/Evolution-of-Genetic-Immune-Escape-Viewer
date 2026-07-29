@@ -1,0 +1,137 @@
+---
+title: "1_3_2_APM_HLALOH"
+author: "AJ"
+date: "2025-08-07"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# 1. Loading Packages
+```{r}
+rm(list = ls())
+
+library("stringr")
+library("dplyr")
+library("patchwork")
+library("ggpubr")
+library("ggridges")
+library("truncnorm")
+library("tidyr")
+library("scatterpie")
+library("tidyselect")
+library("pillar")
+library("data.table")
+library("readr")
+library("ggplot2")
+library("openxlsx")
+library("ggrepel")
+library("tibble")
+library("textshape")
+library("matrixStats")
+library("GenomicRanges")
+library("biomaRt")
+
+PCAWG_path <- "/rsrch6/scratch/hema_bio-Malignan/wchen20/PCAWG"
+PCAWG_path <- "/Users/wchen20/Desktop/PCAWG"
+
+source("/Users/wchen20/Desktop/PCAWG/code/source/basic.R")
+source("/Users/wchen20/Desktop/PCAWG/code/source/insert_newlines.R")
+source("/Users/wchen20/Desktop/PCAWG/code/source/plot_segTiming.R")
+
+figure_path <- "/Users/wchen20/Desktop/PCAWG/Figures/20240827/"
+
+LOH_MSI = LOH_mut <- fread(paste0(PCAWG_path, "/donors_and_biospecimens/LOH_MSI_final.csv"))
+LOH_type <- LOH_MSI %>% mutate(sample_id = aliquot_id) %>% dplyr::select(sample_id, histology_abbreviation)
+LOH_aliquot <- LOH_MSI %>% mutate(sample_id = aliquot_id) %>% dplyr::select(sample_id, icgc_sample_id, MSI_mut)
+LOH_MSS <- LOH_MSI %>% filter(MSI_mut == "MSS")
+sample_MSS <- LOH_MSS  %>% pull(aliquot_id)
+```
+
+# 2. Set path
+```{r}
+# Successful run for TCGA: 808 patients
+# Successful run for ICGC: 1773 patients
+path_HomoDeletion <- "/Users/wchen20/Desktop/2026-02-16_Draft/Final_Results/1_APM/3_HomozygousDeletion/"
+```
+
+# 2. Homozygous deletion
+```{r}
+mart_data <- useEnsembl("ensembl", dataset = "hsapiens_gene_ensembl", GRCh = 37)
+
+cnv_hd <- fread("/Users/wchen20/Desktop/PCAWG/consensus_cnv/somatic_cna_annotated_merged.txt") %>%
+  mutate(total_cn = as.numeric(total_cn),
+         major_cn = as.numeric(major_cn),
+         minor_cn = as.numeric(minor_cn),
+         start = as.numeric(start),
+         end = as.numeric(end)) %>%
+  dplyr::filter(total_cn == 0)
+
+cnv_hd_gr <- GRanges(
+  seqnames  = cnv_hd$chromosome,
+  ranges    = IRanges(start = cnv_hd$start, end = cnv_hd$end),
+  sample_id = cnv_hd$sample_id
+)
+
+## AMP genes
+genes <- APM_noHLA
+
+gene_anno <- getBM(
+  attributes = c("hgnc_symbol", "chromosome_name", "start_position", "end_position"),
+  filters = "hgnc_symbol",
+  values = genes,
+  mart = mart_data
+)
+
+gene_gr <- GRanges(
+  seqnames = gene_anno$chromosome_name, 
+  ranges   = IRanges(start = gene_anno$start_position,
+                     end   = gene_anno$end_position),
+  gene     = gene_anno$hgnc_symbol
+)
+
+hits <- findOverlaps(cnv_hd_gr, gene_gr)
+
+results <- data.frame(
+  sample_id = mcols(cnv_hd_gr)$sample_id[queryHits(hits)],
+  gene      = mcols(gene_gr)$gene[subjectHits(hits)]
+)
+results
+
+results <- data.frame(
+  sample_id = cnv_hd$sample_id[queryHits(hits)],
+  cnv_chr   = cnv_hd$chromosome[queryHits(hits)],
+  cnv_start = cnv_hd$start[queryHits(hits)],
+  cnv_end   = cnv_hd$end[queryHits(hits)],
+  total_cn  = cnv_hd$total_cn[queryHits(hits)],
+  major_cn  = cnv_hd$major_cn[queryHits(hits)],
+  minor_cn  = cnv_hd$minor_cn[queryHits(hits)],
+  gene       = mcols(gene_gr)$gene[subjectHits(hits)],
+  gene_chr   = as.character(seqnames(gene_gr))[subjectHits(hits)],
+  gene_start = start(gene_gr)[subjectHits(hits)],
+  gene_end   = end(gene_gr)[subjectHits(hits)],
+
+  stringsAsFactors = FALSE
+)
+
+length(unique(results$sample_id))
+write.csv(results, paste0(path_HomoDeletion, "/homoDeletion.csv"), row.names = F)
+```
+
+# 4. Summary
+```{r}
+df_HD <- fread(paste0(path_HomoDeletion, "/homoDeletion.csv"))
+
+onco_HD <- df_HD %>% 
+  filter(sample_id %in% sample_MSS) %>% 
+  dplyr::select(sample_id) %>% distinct() %>% 
+  mutate(value = "Homozygous deletion") %>%
+  pivot_wider(names_from = sample_id, values_from = value, values_fill = "") %>% 
+  mutate(V1 = "Homozygous deletion") %>% 
+  #dplyr::select(-"HLALOH") %>% 
+  column_to_rownames("V1")
+dim(onco_HD)
+write.table(onco_HD, paste0(path_HomoDeletion, "/onco_HD.txt"), sep = "\t", quote = FALSE)
+```

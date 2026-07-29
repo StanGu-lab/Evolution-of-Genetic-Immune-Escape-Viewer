@@ -9,7 +9,7 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-# Install and load the required packages
+# 0. Install and load the required packages
 ```{r}
 rm(list = ls())
 
@@ -34,18 +34,19 @@ library("broom")
 library("biomaRt")
 library("scales")
 library("ggsci")
+library("broom")
 
-PCAWG_path <- ".../Project"
+PCAWG_path <- "/Users/wchen20/Desktop/PCAWG"
 gritic_path <- paste0(PCAWG_path, "/MHC_evolution/GRITIC/output")
 expr_path <- paste0(PCAWG_path, "/MHC_evolution/transcriptome/expression")
 ciber_path <- paste0(PCAWG_path, "/MHC_evolution/transcriptome/Cibersort/abs")
 matrix_path <- paste0(PCAWG_path, "/MHC_evolution/transcriptome/expression")
 
-source(".../Project/code/source/CIBERSORT.R")
-source(".../Project/code/source/EnrichedView_modified.R")
-source(".../Project/code/source/basic.R")
-source(".../Project/code/source/insert_newlines.R")
-source(".../Project/code/source/CRP_MAGEMSig0409.R")
+source("/Users/wchen20/Desktop/PCAWG/code/source/CIBERSORT.R")
+source("/Users/wchen20/Desktop/PCAWG/code/source/EnrichedView_modified.R")
+source("/Users/wchen20/Desktop/PCAWG/code/source/basic.R")
+source("/Users/wchen20/Desktop/PCAWG/code/source/insert_newlines.R")
+source("/Users/wchen20/Desktop/PCAWG/code/source/CRP_MAGEMSig0409.R")
 
 ciber_cols <- c("B cells naive", "B cells memory", "Plasma cells", "T cells CD8", "T cells CD4 naive", 
                 "T cells CD4 memory resting", "T cells CD4 memory activated", "T cells follicular helper", 
@@ -61,10 +62,10 @@ LOH_type <- LOH_MSI %>% mutate(sample_id = aliquot_id) %>% dplyr::select(sample_
 LOH_aliquot <- LOH_MSI %>% mutate(sample_id = aliquot_id) %>% dplyr::select(sample_id, icgc_sample_id, MSI_mut)
 sample_MSS <- LOH_MSI %>% filter(MSI_mut == "MSS") %>% pull(aliquot_id)
 
-ciber_path <- ".../Project/MHC_evolution/transcriptome/Cibersort/abs/250805/"
+ciber_path <- "/Users/wchen20/Desktop/PCAWG/MHC_evolution/transcriptome/Cibersort/abs/250805/"
 ```
 
-# RUN CIBERSORT for TCGA RNA-seq data
+# 1. RUN CIBERSORT for TCGA RNA-seq data
 ## Combine all the gene expression for TCGA
 ```{r}
 file_list <- list.files(path = matrix_path, pattern = "^exprSet_MAGE_", full.names = TRUE)
@@ -93,7 +94,7 @@ for (file in file_list) {
 ciber_path <- paste0(PCAWG_path, "/MHC_evolution/transcriptome/Cibersort/abs/241128/TCGA/single")
 matrix_path <- "/Users/wchen20/Desktop/TCGA/RNAseq/matrix/"
 
-sig_matrix_path <- ".../Project/code/LM22.txt"
+sig_matrix_path <- "/Users/wchen20/Desktop/PCAWG/code/LM22.txt"
 sig_matrix <- read.table(sig_matrix_path,header=T, sep="\t",row.names=1,check.names=F)
 
 #The number of permutation
@@ -168,7 +169,7 @@ write.table(ciber_all, file = paste0(ciber_path, "/all_ciber_abs.csv"), sep = ",
 
 ## CIBCESORT results by APM events
 ```{r}
-path_maf <- ".../Project/consensus_snv_indel/maf/maf_from_vcf/"
+path_maf <- "/Users/wchen20/Desktop/PCAWG/consensus_snv_indel/maf/maf_from_vcf/"
 
 mat1 <- fread(paste0(path_maf, "/onco_APM_hlaloh.txt")) %>% 
   column_to_rownames("V1") %>% 
@@ -180,17 +181,19 @@ long_df <- as.data.frame(mat1) %>%
   filter(Status != "") %>%         # only keep mutated entries
   mutate(APM_Event = "APM-Mutant") %>% 
   distinct(aliquot_id, .keep_all = T) %>% dplyr::select("aliquot_id", "APM_Event")
+write.csv(long_df, file = "/Users/wchen20/Desktop/PCAWG/donors_and_biospecimens/APM_long_df.csv", row.names = F)
 
-HLALOH_pcawg <- fread(".../Project/donors_and_biospecimens/LOH_MSI_final.csv") %>% 
+HLALOH_pcawg <- fread("/Users/wchen20/Desktop/PCAWG/donors_and_biospecimens/LOH_MSI_final.csv") %>% 
   dplyr::select(-APM_event) %>%
   subset(MSI_mut == "MSS") %>% 
   left_join(., long_df, by = "aliquot_id") %>% 
   mutate(APM_Event = ifelse(!is.na(APM_Event), "APM-Mutant", "APM-WT"),
          APM_Event = factor(APM_Event, levels = c("APM-WT", "APM-Mutant"))) %>% 
-  dplyr::select(submitted_specimen_id, histology_abbreviation, APM_Event)
+  dplyr::select("submitted_specimen_id", "histology_abbreviation", "APM_Event", "purity", "ploidy", "wgd_status", "total_perMB")
 table(HLALOH_pcawg$APM_Event)
+write.csv(HLALOH_pcawg, file = "/Users/wchen20/Desktop/PCAWG/donors_and_biospecimens/LOH_MSI_APM.csv", row.names = F)
 
-ciber_all <- fread(".../Project/MHC_evolution/transcriptome/Cibersort/abs/all_ciber_abs.csv") %>% 
+ciber_all <- fread("/Users/wchen20/Desktop/PCAWG/MHC_evolution/transcriptome/Cibersort/abs/all_ciber_abs.csv") %>% 
   dplyr::select(-APM_Event) %>%
   inner_join(HLALOH_pcawg, by = c("submitted_specimen_id", "histology_abbreviation"))
 write.csv(ciber_all, paste0(ciber_path, "/ciber_all.csv"), row.names = F)
@@ -227,7 +230,7 @@ for (type in types) {
       label = "p.signif",
       size = 6)
   
-  ggsave(filename = paste0(ciber_path, "/", type, ".pdf"), plot = p_ciber, width = 30, height = 6.6, units = "in")
+  #ggsave(filename = paste0(ciber_path, "/", type, ".pdf"), plot = p_ciber, width = 30, height = 6.6, units = "in")
 }
 
 # All cancer types
@@ -249,6 +252,7 @@ wilcox_res <- filtered_data %>%
   group_by(histology_abbreviation, cell_type) %>%
   do(tidy(wilcox.test(value ~ APM_Event, data = .))) 
 
+# Perform linear regression
 wilcox_res <- wilcox_res %>%
   group_by(histology_abbreviation) %>%
   mutate(fdr = p.adjust(p.value, method = "fdr")) 
@@ -277,7 +281,6 @@ plot_wilcox <- ggplot(wilcox, aes(x = histology_abbreviation, y = cell_type, col
         panel.grid.major = element_blank(),
         panel.grid.minor = element_blank(),
         panel.background = element_blank())
-ggsave(filename = paste0(ciber_path, "/", "Ciberabs_all.pdf"), plot = plot_wilcox, width = 16, height = 7.5, units = "in")
 ggsave(filename =  paste0(figure_path, "/Figure1d.pdf"), plot = plot_wilcox, width = 16, height = 7.5, units = "in")
 ```
 
@@ -324,37 +327,4 @@ wilcox <- left_join(ratio_res, wilcox_res, by = c("histology_abbreviation", "cel
                  log2Ratio = log2(ratio),
                  `-log10FDR` = -log10(fdr)) %>%
           ungroup() 
-write.table(wilcox, file = paste0(ciber_path, "/ciber_wilcoxcom.csv"), sep = ",", row.names = FALSE, quote = FALSE)                                         
-## Plot
-wilcox <- fread(paste0(ciber_path, "/ciber_wilcoxcom.csv"))
-significant_points <- subset(wilcox, fdr < 0.1)
-sig_type <- unique(significant_points$histology_abbreviation)
-
-wilcox <- wilcox %>% filter(histology_abbreviation %in% sig_type) %>% mutate(cell_type = sub("_", "", cell_type))
-
-significant_points <- subset(wilcox, fdr < 0.1)
-
-plot_wilcox <- ggplot(wilcox, aes(x = histology_abbreviation, y = cell_type, fill = log2Ratio, size = `-log10FDR`)) +
-  coord_flip() +
-  geom_point(shape = 21,    
-             colour = "black",  
-             stroke = 0.3,      
-             alpha = 1) +     
-  scale_fill_gradient2(low = "#4DBBD5FF", high = "#DC0000FF", midpoint = 0, 
-                       limits = c(-3, 3), 
-                       breaks = c(-3, 0, 3),
-                       labels = c("-3", "0", "3")) +
-  scale_size_continuous(name = "-log10FDR", range = c(2, 8)) +
-  labs(x = "", y = "", fill = "Log2Ratio", size = "-log10FDR") +
-  geom_text(data = significant_points, aes(label = "*"), vjust = 0.8, color = "black") +
-  theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1, size = 18, color = "black"),
-        axis.text.y = element_text(size = 16, hjust = 1, color = "black"),
-        panel.grid.major = element_blank(),
-        panel.grid.minor = element_blank(),
-        panel.background = element_blank(),
-        legend.position = "top",
-        axis.line = element_line(color = "black"),
-        axis.ticks = element_line(color = "black"))
-
-ggsave(filename = paste0(ciber_path, "/Plot_ciber_wilcox.pdf"), plot = plot_wilcox, width = 9, height = 5, units = "in")
-```
+write.table(wilcox, file = paste0(ciber_path, "/ciber_wilcoxcom.csv"), sep = ",", row.names = FALSE, quote = FALSE)  

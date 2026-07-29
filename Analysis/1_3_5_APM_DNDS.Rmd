@@ -9,7 +9,7 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-# 1. Load Packages
+# 0. Load Packages
 ```{r}
 rm(list = ls())
 
@@ -21,12 +21,12 @@ library("tidyr")
 library("stringr")
 library("ggplot2")
 
-source(".../Project/code/source/basic.R")
-source(".../Project/code/source/plot_dnnsall.R")
+source("/Users/wchen20/Desktop/PCAWG/code/source/basic.R")
+source("/Users/wchen20/Desktop/PCAWG/code/source/plot_dnnsall.R")
 
-PCAWG_path <- "/rsrch6/scratch/hema_bio-Malignan/wchen20/PCAWG"
-PCAWG_path <- ".../Project"
-figure_path <- ".../Project/Figures/20240827/"
+PCAWG_path <- "${path_rsrch}/PCAWG"
+PCAWG_path <- "/Users/wchen20/Desktop/PCAWG"
+figure_path <- "/Users/wchen20/Desktop/PCAWG/Figures/20240827/"
 
 LOH_MSI = LOH_mut <- fread(paste0(PCAWG_path, "/donors_and_biospecimens/LOH_MSI_final.csv"))
 LOH_type <- LOH_MSI %>% mutate(sample_id = aliquot_id) %>% dplyr::select(sample_id, histology_abbreviation)
@@ -34,25 +34,27 @@ LOH_aliquot <- LOH_MSI %>% mutate(sample_id = aliquot_id) %>% dplyr::select(samp
 LOH_MSS <- LOH_MSI %>% filter(MSI_mut == "MSS")
 sample_MSS <- LOH_MSS  %>% pull(aliquot_id)
 
-rename_list <- fread(".../Project/CRISPR/CRISPRscreen20240118/rename_list.csv")
+rename_list <- fread("/Users/wchen20/Desktop/PCAWG/CRISPR/CRISPRscreen20240118/rename_list.csv")
 rename_list$pathway <- str_to_title(rename_list$pathway)
 
-figure_path = ".../Project/Figures/20250818/"
-dNdScv_dir = ".../Project/MHC_evolution/DNDS/dNdScv/dNdScvAPM/250807/"
-
-dNdScv_dir <- ".../Project/MHC_evolution/DNDS/dNdScv/dNdScvAPM/250807/"
-dNdScv_dir <- ".../Project/MHC_evolution/DNDS/dNdScv/dNdScvAPM/250813/"
+figure_path = "/Users/wchen20/Desktop/PCAWG/Figures/20250818/"
+path_dNdScv <- "/Users/wchen20/Desktop/PCAWG/MHC_evolution/DNDS/dNdScv/dNdScvAPM/250813/"
 ```
 
-# 2. Prepare input for dNdScv
+# Set path
+```{r}
+path_dNdScv <- "/Users/wchen20/Desktop/2026-02-16_Draft/Final_Results/4_dNdS_APM/"
+```
+
+# 1. Prepare input for dNdScv
 ```{r pressure, echo=FALSE} 
 ## DN/DS
 non_syn <- c("Frame_Shift_Del", "Frame_Shift_Ins", "Splice_Site", "Translation_Start_Site", "Nonsense_Mutation", 
              "Nonstop_Mutation", "In_Frame_Del", "In_Frame_Ins", "Missense_Mutation")
 
 ## MAF from VCF
-pcawgmaf_input <- "/rsrch6/scratch/hema_bio-Malignan/wchen20/PCAWG/consensus_snv_indel/maf_from_vcf/maf_pcawg_vcf.maf"
-maf_out <- "/rsrch6/scratch/hema_bio-Malignan/wchen20/PCAWG/consensus_snv_indel/maf_from_vcf/"
+pcawgmaf_input <- "${path_rsrch}/PCAWG/consensus_snv_indel/maf_from_vcf/maf_pcawg_vcf.maf"
+maf_out <- "${path_rsrch}/PCAWG/consensus_snv_indel/maf_from_vcf/"
 data <- fread(pcawgmaf_input)
 dim(data)
 
@@ -75,7 +77,7 @@ mutate(Start_position_dnds = Start_Position,
 dplyr::select(Hugo_Symbol, Variant_Classification, Start_position_dnds, End_position_dnds,Tumor_Seq_Allele1_dnds, Tumor_Seq_Allele2_dnds) 
 
 ## dNdScv without polysolver
-path_poly = "/rsrch6/scratch/hema_bio-Malignan/wchen20/PCAWG/MHC_evolution/HLAmutation/results/"
+path_poly = "${path_rsrch}/PCAWG/MHC_evolution/HLAmutation/results/"
 HLAmut_icgc <- fread(paste0(path_poly, "/maf_icgc_HLAmut_final.maf"))
 HLAmut_tcga <- fread(paste0(path_poly, "/maf_tcga_HLAmut_final.maf"))
 
@@ -93,13 +95,13 @@ mutations_all <- rbind(mutations, HLAmut_pcawg)
 write.table(mutations_all, file = paste0(maf_out, "/mutations_dNdScv_updated_withsynHLA.txt"), sep = "\t", row.names = FALSE, quote = FALSE)
 ```
 
-# APM
+# 2. APM
 ```{r}
 APM <- c("HLA-A", "HLA-B", "HLA-C","B2M", "NLRC5", "TAP1", "TAP2" ,"TAPBP",  "PSMB8", "PSMB9", "PSMB10", "ERAP1", "ERAP2")
 APM_pathway <- data.frame(Gene = APM, Pathway = rep("APM", length(APM)))
 
 ## MSS samples
-allmut <- fread(".../Project/MHC_evolution/DNDS/dNdScv/250807/mutations_dNdScv_updated_withsynHLA.txt") %>% 
+allmut <- fread("/Users/wchen20/Desktop/PCAWG/MHC_evolution/DNDS/dNdScv/250807/mutations_dNdScv_updated_withsynHLA.txt") %>% 
   filter(sampleID %in% sample_MSS)
 
 types <- "All-Cancer"
@@ -126,30 +128,30 @@ for (type in types) {
     
     # Write out the selection coefficients
     sel_cv = dndsout$sel_cv
-    write.table(sel_cv, file = paste0(dNdScv_dir, "/sel_cv_", type, "_APM.csv"), sep = ",", row.names = FALSE, quote = FALSE)
-    write_csv(sel_cv, file = paste0(dNdScv_dir, "/sel_cv_", type, "_APM.csv"))
+    write.table(sel_cv, file = paste0(path_dNdScv, "/sel_cv_", type, "_APM.csv"), sep = ",", row.names = FALSE, quote = FALSE)
+    write_csv(sel_cv, file = paste0(path_dNdScv, "/sel_cv_", type, "_APM.csv"))
     
     ci = geneci(dndsout)
-    write.table(ci, file = paste0(dNdScv_dir, "/ci_", type, "_APM.csv"), sep = ",", row.names = FALSE, quote = FALSE)
-    write_csv(ci, file = paste0(dNdScv_dir, "/ci_", type, "_APM.csv"))
+    write.table(ci, file = paste0(path_dNdScv, "/ci_", type, "_APM.csv"), sep = ",", row.names = FALSE, quote = FALSE)
+    write_csv(ci, file = paste0(path_dNdScv, "/ci_", type, "_APM.csv"))
     
     # Filter and write out significant genes
     #signif_genes = sel_cv <- subset(sel_cv, qglobal_cv < 0.1) %>% select(gene_name, qglobal_cv)
     #rownames(signif_genes) = NULL
-    #write.table(signif_genes, file = paste0(dNdScv_dir, "/signif_genes_", type, "_APM.csv"), 
+    #write.table(signif_genes, file = paste0(path_dNdScv, "/signif_genes_", type, "_APM.csv"), 
     #            sep = ",", row.names = FALSE, quote = FALSE)
     
     # Write out the global dN/dS estimates
     globaldnds <- dndsout$globaldnds
-    write_csv(globaldnds, file = paste0(dNdScv_dir, "/globaldnds_", type, "_APM.csv"))
+    write_csv(globaldnds, file = paste0(path_dNdScv, "/globaldnds_", type, "_APM.csv"))
     
     # Write out annotated mutations
     annotmuts <- dndsout$annotmuts
-    write_csv(annotmuts, file = paste0(dNdScv_dir, "/annotmuts_", type, "_APM.csv"))
+    write_csv(annotmuts, file = paste0(path_dNdScv, "/annotmuts_", type, "_APM.csv"))
     
     # Write out the local model of dNdS
     localmodel = dndsout$sel_loc
-    write_csv(localmodel, file = paste0(dNdScv_dir, "/localmodel_", type, "_APM.csv"))
+    write_csv(localmodel, file = paste0(path_dNdScv, "/localmodel_", type, "_APM.csv"))
     
   }, error = function(e) {
     print(paste0("Error processing ", type, "_", "combination: ", e$message))
@@ -158,9 +160,9 @@ for (type in types) {
 ```
 
 
-## Combine 
+# 3. Combine 
 ```{r}
-file_list <- list.files(path = dNdScv_dir, pattern = "globaldnds_*", recursive = FALSE, full.names = TRUE)
+file_list <- list.files(path = path_dNdScv, pattern = "globaldnds_*", recursive = FALSE, full.names = TRUE)
 
 dNdScv <- list()
 
@@ -179,35 +181,5 @@ dnds_all <- rbindlist(dNdScv, fill = TRUE) %>%
          upper = pmin(pmax(log_cihigh, -4.5), 4.5),
          lower = pmin(pmax(log_cilow, -4.5), 4.5)) %>%
   select(-log_mle, -log_cihigh, -log_cilow)
-write_csv(dnds_all, file = paste0(dNdScv_dir, "/all.csv"))
-```
-
-
-```{r}
-dnds_all <- fread(paste0(dNdScv_dir, "/all.csv"))
-
-dNdScv_plot <- ggplot(dnds_all, aes(x = type, y = MLE, ymax = upper, ymin = lower, group = name, color = name)) +
-  geom_linerange(position = position_dodge(width = 0.5), color = "#A5A4A4") +
-  geom_point(position = position_dodge(width = 0.5), size = 2) +
-  #scale_y_continuous(breaks = c(-4, 0, 4), limits = c(-4.5, 4.5)) +
-  scale_y_continuous(breaks = pretty(range(dnds_all$MLE, na.rm = TRUE)),
-                          labels = function(x) 2^x) +
-  geom_hline(yintercept = 0, linetype = "dotted", color = "black", size = 0.8) +
-  scale_color_manual(values = custom_colors, labels = custom_labels) +
-  labs(color = "Mutation Type", x = "", y = "DN:DS ratio") +
-  theme(panel.background = element_blank(), 
-        axis.text.x = element_text(angle = 45, vjust = 1, hjust = 1, size = 10, colour = "black"),
-        axis.text.y = element_text(vjust = 0.5, hjust = 1, size = 8, colour = "black"),
-        axis.title.y = element_text(size = 10), 
-        plot.title = element_text(hjust = 0.5),
-        panel.grid.major = element_blank(),
-        panel.grid.minor = element_blank(),
-        axis.line = element_line(color = "black"),
-        axis.ticks = element_line(color = "black"),
-        strip.text = element_text(size = 10),
-        legend.title = element_text(size = 8), 
-        legend.text = element_text(size = 8))
-
-ggsave(filename = paste0(dNdScv_dir, "/dNdScv_plot.pdf"), plot = dNdScv_plot, width = 10, height = 3, units = "in")
-ggsave(filename = paste0(figure_path, "/SFigure1c.pdf"), plot = dNdScv_plot, width = 10, height = 3, units = "in")
+write_csv(dnds_all, file = paste0(path_dNdScv, "/all.csv"))
 ```

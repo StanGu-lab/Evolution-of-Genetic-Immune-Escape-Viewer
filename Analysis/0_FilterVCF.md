@@ -5,22 +5,41 @@
 ```sh
 #BSUB -W 24:00
 #BSUB -q medium
-#BSUB –cwd path_to_project/PCAWG/consensus_snv_indel/
+#BSUB –cwd ${path_rsrch}PCAWG/consensus_snv_indel/
 #BSUB –u wchen20@mdanderson.org
 #BSUB -n 24
 #BSUB -M 256
 #BSUB -R rusage[mem=256]
 #BSUB -P MHC_Evolution
 #BSUB -J vcf2maf
-#BSUB -o path_to_project/PCAWG/consensus_snv_indel/
+#BSUB -o ${path_rsrch}PCAWG/consensus_snv_indel/
 
 #module load singularity/3.7.0
 #module load htslib
 
-base_path="path_to_project/PCAWG/consensus_snv_indel/vcf/"
+base_path="${path_rsrch}/PCAWG/consensus_snv_indel/vcf/"
 base_inpath="/mnt/scratch/hema_bio-Malignan/wchen20/PCAWG/consensus_snv_indel/vcf/"
 
 projects=("icgc" "tcga")
+
+#for proj in "${projects[@]}"; do
+#
+#   source_dir="${base_path}/${proj}_filtered/snv_mnv/"
+#   target_dir="${base_path}/${proj}_filtered/annoted/"
+#
+#   # Create the target directory if it doesn't exist
+#   mkdir -p "$target_dir"
+#   
+#   # Loop through all .vcf.gz files in the source directory
+#   for file in "$source_dir"/*.vcf.gz; do
+#
+#    filename=$(basename "$file" .gz)
+#    
+#    gunzip -c "$file" > "$target_dir/$filename"
+#    tabix -p vcf "$target_dir/$filename"
+#    done
+#done
+
 
 for proj in "${projects[@]}"; do
 
@@ -41,7 +60,7 @@ for proj in "${projects[@]}"; do
     vcf_infile="${directory_in}/${vcf_filename}"
     maf_infile="${directory_in}/${maf_filename}"
 
-    singularity exec -C -B /rsrch6/:/mnt -B /home/wchen20/:/data path_to_projectwchen20/vcf2maf/vcf2maf.sif \
+    singularity exec -C -B /rsrch6/:/mnt -B /home/wchen20/:/data ${path_home}/vcf2maf/vcf2maf.sif \
     perl /data/vcf2maf/vcf2maf-1.6.21/vcf2maf.pl --input-vcf ${vcf_infile} \
                                      --output-maf ${maf_infile} \
                                      --ref-fasta /data/.vep/homo_sapiens/102_GRCh37/Homo_sapiens.GRCh37.dna.toplevel.fa.gz \
@@ -66,10 +85,10 @@ wait
 ```
 
 ## ----------------------------------------------------------
-## Functional impact
+## 2. Functional impact
 ## ----------------------------------------------------------
 ```sh
-base_path="path_to_project/PCAWG/consensus_snv_indel/vcf/"
+base_path="${path_rsrch}PCAWG/consensus_snv_indel/vcf/"
 proj="tcga"
 directory="${base_path}/${proj}_filtered/annoted"
 
@@ -79,41 +98,16 @@ R
 ```
 
 ```R
-source("path_to_projectwchen20/code/source/GRITIC_summary.R")
+source("${path_home}/code/source/GRITIC_summary.R")
 
-path_am <- "path_to_project/PCAWG/consensus_snv_indel/vcf/AlphaMissense_filtered/"
-path_saveam <- "path_to_project/PCAWG/consensus_snv_indel/vcf/AlphaMissense_filtered/non_syn/"
+path_am <- "${path_rsrch}PCAWG/consensus_snv_indel/vcf/AlphaMissense_filtered/"
+path_saveam <- "${path_rsrch}PCAWG/consensus_snv_indel/vcf/AlphaMissense_filtered/non_syn/"
 dir.create(path_saveam)
-
-## AlphaMissene
-list_am <- list.files(path_am, pattern = "*maf", full.names = TRUE, recursive = TRUE)
-
-for (file_maf in list_am) {
-
-  file_name = basename(file_maf)
-  #save_name = sub("_am.maf", "_am.csv", file_name)
-  save_maf = sub("_am.maf", "_nonsyn.maf", file_name)
-
-  aliquot_id = sub(".consensus.20160830.filtered.somatic.snv_mnv_am.maf", "", file_name)
-  aliquot_id = sub(".consensus.20161006.filtered.somatic.indel_am.maf", "", aliquot_id)
-  
-  maf_nonsyn <- fread(file_maf, skip = "Hugo_Symbol") %>% filter(Variant_Classification %in% non_syn) %>% 
-              mutate(Tumor_Sample_Barcode = aliquot_id)
-  write.table(maf_nonsyn, paste0(path_saveam, "/", save_maf), sep = "\t", row.names = FALSE, quote = FALSE)
-
-  #maf_nonsyn <- fread(file_maf, skip = "Hugo_Symbol") %>% filter(Variant_Classification %in% non_syn) %>% 
-  #            mutate(Tumor_Sample_Barcode = aliquot_id) %>%
-  #            dplyr::select(Hugo_Symbol, Entrez_Gene_Id, Center, NCBI_Build, Chromosome, Start_Position, End_Position,
-  #            Strand, Variant_Classification, Variant_Type, Reference_Allele, Tumor_Seq_Allele1, Tumor_Seq_Allele2, Tumor_Sample_Barcode, CSQ, am_class, am_pathogenicity)
-
-  #write.csv(maf_nonsyn, file = paste0(path_saveam, save_name), row.names = F)
- 
-}
 
 ## VEP
 for (proj in c("icgc", "tcga")) {
 
-  path_vep <- paste0("path_to_project/PCAWG/consensus_snv_indel/vcf/", proj, "_filtered/annoted/")
+  path_vep <- paste0("${path_rsrch}PCAWG/consensus_snv_indel/vcf/", proj, "_filtered/annoted/")
   list_vep <- list.files(path_vep, pattern = "*maf", full.names = TRUE, recursive = TRUE)
 
   for (file_maf in list_vep) {
@@ -134,7 +128,7 @@ for (proj in c("icgc", "tcga")) {
 ```
 
 ## ----------------------------------------------------------
-## Oncogenic impact by OncoKB
+## 3. Oncogenic impact by OncoKB
 ## ----------------------------------------------------------
 ```sh
 module load python/3.10.5-gdc
@@ -145,13 +139,13 @@ OMAF="test/example_maf.oncokb.txt"
 
 IMAF="data/example_maf.txt"
 OMAF="test/example_maf.oncokb.txt"
-TOKEN="0bc84c4d-0e1a-4ab9-a2d8-ede108b97579" #OncoKB API Token
+TOKEN="" #OncoKB API Token
 
 python3.11 MafAnnotator.py -i "$IMAF" -o "$OMAF" -b "$TOKEN" 
 
 module load python/3.10.5-gdc
 
-cd path_to_projectwchen20/oncokb-annotator
+cd ${path_home}/oncokb-annotator
 
 TOKEN="0bc84c4d-0e1a-4ab9-a2d8-ede108b97579" #OncoKB API Token
 
@@ -159,8 +153,7 @@ IMAF="/Users/wchen20/Desktop/PCAWG/consensus_snv_indel/non_syn/mutation_impact/f
 OMAF="test/ffe4bb51-e98a-41a7-a4e1-c3970386889c.oncokb.txt"
 python3.11 MafAnnotator.py -i "$IMAF" -o "$OMAF" -b "$TOKEN"
 
-
-TOKEN="0bc84c4d-0e1a-4ab9-a2d8-ede108b97579" #OncoKB API Token
+TOKEN="" #OncoKB API Token
 INPUT_DIR="/Users/wchen20/Desktop/PCAWG/consensus_snv_indel/non_syn/mutation_impact/oncoKB/input"
 OUTPUT_DIR="/Users/wchen20/Desktop/PCAWG/consensus_snv_indel/non_syn/mutation_impact/oncoKB/annot"
 

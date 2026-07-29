@@ -1,0 +1,114 @@
+---
+title: "Figures_V17_Figure1AB"
+author: "AJ"
+date: "2025-08-05"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# 0. Loading Packages
+```{r}
+rm(list = ls())
+
+suppressMessages(library("ggplot2"))
+suppressMessages(library("patchwork"))
+suppressMessages(library("ggpubr"))
+suppressMessages(library("maftools"))
+suppressMessages(library("survival"))
+suppressMessages(library("survminer"))
+suppressMessages(library("tidyr"))
+suppressMessages(library("broom"))
+suppressMessages(library("data.table"))
+suppressMessages(library("dplyr"))
+suppressMessages(library("forcats"))
+suppressMessages(library("textshape"))
+suppressMessages(library("ggrepel"))
+suppressMessages(library("tibble"))
+suppressMessages(library("readr"))
+suppressMessages(library("ggradar"))
+suppressMessages(library("ggsci"))
+suppressMessages(library("cowplot"))
+suppressMessages(library("ggdist"))
+
+PCAWG_path <- "/Users/wchen20/Desktop/PCAWG/"
+source(paste0(PCAWG_path, "/code/source/basic.R"))
+source(paste0(PCAWG_path, "/code/source/oncoplot2.R"))
+```
+
+# Set path
+```{r}
+path_figure <- "/Users/wchen20/Desktop/2026-02-16_Draft/Revision_Figures/Original_output/"
+
+path_HLAmutations <- "/Users/wchen20/Desktop/2026-02-16_Draft/Final_Results/1_APM/1_HLAmutations/"
+path_HLALOH <- "/Users/wchen20/Desktop/2026-02-16_Draft/Final_Results/1_APM/2_HLALOH/"
+path_HomoDeletion <- "/Users/wchen20/Desktop/2026-02-16_Draft/Final_Results/1_APM/3_HomozygousDeletion/"
+path_APMall <- "/Users/wchen20/Desktop/2026-02-16_Draft/Final_Results/1_APM/4_APMall/"
+```
+
+# 1. Figure 1A -- Plot for APM mutations + HLA LOH + homozygous deletion
+```{r}
+# APM_event = HLAmut + HLALOH + nonHLAmut + noHLA_HD
+HLALOH_pcawg <- fread(paste0(path_APMall, "LOH_MSI_final_B.csv")) %>% 
+  subset(MSI_mut == "MSS") %>% 
+  mutate(APM_Event = factor(APM_Event, levels = c("APM-WT", "APM-Mutant"))) 
+table(HLALOH_pcawg$APM_Event)
+
+patient_freq <- HLALOH_pcawg %>% mutate(count = 1)
+
+TCGA_sum <- patient_freq %>%
+  group_by(histology_abbreviation) %>%
+  summarise(Total_all = sum(count)) %>%
+  ungroup() %>% dplyr::select(histology_abbreviation, Total_all)
+
+TCGA_proj <- patient_freq %>%
+  group_by(histology_abbreviation, APM_Event) %>%
+  summarise(Total = sum(count), .groups = "drop") %>%
+  group_by(histology_abbreviation) %>%
+  filter(all(c("APM-WT", "APM-Mutant") %in% APM_Event)) %>%
+  ungroup()
+
+sum(TCGA_proj$Total)
+
+prop_df <- TCGA_proj %>%
+  group_by(histology_abbreviation) %>%
+  mutate(
+    total = sum(Total),
+    prop = Total / total
+  ) %>%
+  ungroup() %>%
+  filter(APM_Event == "APM-Mutant") %>%
+  mutate(label = paste0(round(prop * 100, 1)))
+
+## Plot for HLAmut + HLALOH + nonHLAmut + noHLA_HD
+APM_freq <- ggplot(TCGA_proj, aes(x = histology_abbreviation, y = Total, fill = APM_Event)) +
+  geom_bar(stat = "identity", position = "stack", width = 0.9) +
+  scale_fill_manual(values = color_APM_envet) +
+  labs(x = "",  y = "Numbers of Samples", fill = "APM Event") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1,  vjust = 1, size = 16, colour = "black"),
+        axis.text.y = element_text(size = 14, colour = "black"),
+        plot.title = element_text(size = 16),
+        axis.title.y = element_text(size = 16),
+        legend.text = element_text(size = 12),  
+        legend.title = element_text(size = 14),
+        plot.margin = margin(t = 5, l = 30, r = 20, b = 10),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.background = element_blank(),
+        axis.line = element_line(color = "black"),
+        axis.ticks = element_line(color = "black"),
+        legend.position = "top") +
+  coord_cartesian(ylim = c(0, max(TCGA_sum$Total_all) + 20)) +
+  geom_text(
+    data = prop_df,
+    aes(x = histology_abbreviation, y = total, label = label),
+    vjust = -0.3,
+    hjust = 0.5,
+    size = 4.5
+  )
+
+ggsave(filename = paste0(path_figure, "/Figure1a.pdf"), plot = APM_freq, width = 14, height = 6, units = "in")
+```

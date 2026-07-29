@@ -9,7 +9,7 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-# Loading Packages
+# 1. Loading Packages
 ```{r}
 rm(list = ls())
 
@@ -33,7 +33,7 @@ suppressMessages(library("ggsci"))
 suppressMessages(library("cowplot"))
 suppressMessages(library("ggdist"))
 
-PCAWG_path <- "../Project"
+PCAWG_path <- "/Users/wchen20/Desktop/PCAWG/"
 source(paste0(PCAWG_path, "/code/source/basic.R"))
 source(paste0(PCAWG_path, "/code/source/oncoplot2.R"))
 
@@ -43,22 +43,20 @@ LOH_aliquot <- LOH_MSI %>% mutate(sample_id = aliquot_id) %>% dplyr::select(samp
 LOH_MSS <- LOH_MSI %>% filter(MSI_mut == "MSS")
 sample_MSS <- LOH_MSS  %>% pull(aliquot_id)
 
-color_event <- c("Mut" = "#E64B35FF", "WT" = "#4DBBD5FF")
-color_APM_envet <- c("APM-Mutant" = "#E64B35FF", "APM-WT" = "#4DBBD5FF")
-figure_path <- "../ProjectFigures/20250813/"
+path_figure <- "/Users/wchen20/Desktop/PCAWG/Figures/20250813/"
 ```
 
-# Set path
+# 2. Set path
 ```{r}
 # Successful run for TCGA: 808 patients
 # Successful run for ICGC: 1773 patients
-HLALOH_path <- "../ProjectMHC_evolution/HLALOH/results/"
+path_HLALOH <- "/Users/wchen20/Desktop/2026-02-16_Draft/Final_Results/1_APM/2_HLALOH/"
 ```
 
-# HLA LOH copy number
+# 3. HLA LOH copy number -- results derived from /Users/wchen20/Desktop/2026-02-16_Draft/code/Revision/workflow/1_2_LOHHLA250804.md
 ```{r}
-hlalohall_icgc <- fread(paste0(HLALOH_path, "/LOHHLA_icgc_all.csv"))
-hlalohall_tcga <- fread(paste0(HLALOH_path, "/LOHHLA_tcga_all.csv"))
+hlalohall_icgc <- fread(paste0(path_HLALOH, "/LOHHLA_icgc_all.csv"))
+hlalohall_tcga <- fread(paste0(path_HLALOH, "/LOHHLA_tcga_all.csv"))
 
 df_HLALOH <- rbind(hlalohall_icgc, hlalohall_tcga)
 
@@ -70,35 +68,20 @@ df_HLALOH <- df_HLALOH %>% subset(HLALOH == "Pos" & !is.na(Loss)) %>%
   dplyr::select(LOHHLA_allele1, LOHHLA_allele2, HLA_type1copyNum_withBAFBin, HLA_type2copyNum_withBAFBin, PVal_unique, sample_id, AI, Loss, HLALOH, CN_1, CN_2, major, minor) %>% 
   distinct(sample_id, major, minor, .keep_all = TRUE)
 length(unique(df_HLALOH$sample_id))
-write.csv(df_HLALOH, paste0(HLALOH_path, "/df_HLALOH.csv"), row.names = FALSE)
+write.csv(df_HLALOH, paste0(path_HLALOH, "/df_HLALOH.csv"), row.names = FALSE)
 ```
 
-# Summary
+# 4. Summary
 ```{r}
-df_HLALOH <- fread(paste0(HLALOH_path, "/df_HLALOH.csv"))
+df_HLALOH <- fread(paste0(path_HLALOH, "/df_HLALOH.csv"))
 
-## Homo Deletion
-df_HLALOH_homo <- df_HLALOH %>% filter(major == 0)
-length(unique(df_HLALOH_homo$sample_id))
-
-## With Homo
-onco_hlaloh <- df_HLALOH %>% filter(sample_id %in% sample_MSS) %>% 
+onco_hlaloh <- df_HLALOH %>% 
+  filter(sample_id %in% sample_MSS) %>% 
   dplyr::select(sample_id, HLALOH) %>% distinct() %>% 
   mutate(value = "HLALOH") %>%
   pivot_wider(names_from = sample_id, values_from = value, values_fill = "") %>% 
   mutate(V1 = "HLALOH") %>% 
   dplyr::select(-"HLALOH") %>% column_to_rownames("V1")
 dim(onco_hlaloh)
-write.table(onco_hlaloh, "../Projectconsensus_snv_indel/maf/onco_hlaloh.txt", sep = "\t", quote = FALSE)
-
-## Without Homo
-onco_hlaloh_nohomo <- df_HLALOH %>%  filter(major > 0) %>% filter(sample_id %in% sample_MSS) %>% 
-  dplyr::select(sample_id, HLALOH) %>% distinct() %>% 
-  mutate(value = "HLALOH") %>%
-  pivot_wider(names_from = sample_id, values_from = value, values_fill = "") %>% 
-  mutate(V1 = "HLALOH") %>% 
-  dplyr::select(-"HLALOH") %>% column_to_rownames("V1")
-
-dim(onco_hlaloh_nohomo)
-write.table(onco_hlaloh_nohomo, "../Projectconsensus_snv_indel/maf/onco_hlaloh_nohomo.txt", sep = "\t", quote = FALSE)
+write.table(onco_hlaloh, paste0(path_HLALOH, "/onco_hlaloh.txt"), sep = "\t", quote = FALSE)
 ```

@@ -22,25 +22,6 @@ base_inpath="/mnt/scratch/hema_bio-Malignan/wchen20/PCAWG/consensus_snv_indel/vc
 
 projects=("icgc" "tcga")
 
-#for proj in "${projects[@]}"; do
-#
-#   source_dir="${base_path}/${proj}_filtered/snv_mnv/"
-#   target_dir="${base_path}/${proj}_filtered/annoted/"
-#
-#   # Create the target directory if it doesn't exist
-#   mkdir -p "$target_dir"
-#   
-#   # Loop through all .vcf.gz files in the source directory
-#   for file in "$source_dir"/*.vcf.gz; do
-#
-#    filename=$(basename "$file" .gz)
-#    
-#    gunzip -c "$file" > "$target_dir/$filename"
-#    tabix -p vcf "$target_dir/$filename"
-#    done
-#done
-
-
 for proj in "${projects[@]}"; do
 
   directory="${base_path}/${proj}_filtered/annoted"
@@ -60,7 +41,7 @@ for proj in "${projects[@]}"; do
     vcf_infile="${directory_in}/${vcf_filename}"
     maf_infile="${directory_in}/${maf_filename}"
 
-    singularity exec -C -B /rsrch6/:/mnt -B /home/wchen20/:/data /rsrch6/home/hema_bio-Malignan/wchen20/vcf2maf/vcf2maf.sif \
+    singularity exec -C -B /rsrch6/:/mnt -B /home/wchen20/:/data path_to_projectwchen20/vcf2maf/vcf2maf.sif \
     perl /data/vcf2maf/vcf2maf-1.6.21/vcf2maf.pl --input-vcf ${vcf_infile} \
                                      --output-maf ${maf_infile} \
                                      --ref-fasta /data/.vep/homo_sapiens/102_GRCh37/Homo_sapiens.GRCh37.dna.toplevel.fa.gz \
@@ -98,7 +79,7 @@ R
 ```
 
 ```R
-source("/rsrch6/home/hema_bio-Malignan/wchen20/code/source/GRITIC_summary.R")
+source("path_to_projectwchen20/code/source/GRITIC_summary.R")
 
 path_am <- "path_to_project/PCAWG/consensus_snv_indel/vcf/AlphaMissense_filtered/"
 path_saveam <- "path_to_project/PCAWG/consensus_snv_indel/vcf/AlphaMissense_filtered/non_syn/"
@@ -170,7 +151,7 @@ python3.11 MafAnnotator.py -i "$IMAF" -o "$OMAF" -b "$TOKEN"
 
 module load python/3.10.5-gdc
 
-cd /rsrch6/home/hema_bio-Malignan/wchen20/oncokb-annotator
+cd path_to_projectwchen20/oncokb-annotator
 
 TOKEN="0bc84c4d-0e1a-4ab9-a2d8-ede108b97579" #OncoKB API Token
 

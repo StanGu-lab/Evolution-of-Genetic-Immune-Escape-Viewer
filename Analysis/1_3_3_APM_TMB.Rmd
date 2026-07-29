@@ -47,11 +47,11 @@ path_TMB <- "/Users/wchen20/Desktop/2026-02-16_Draft/Final_Results/2_TMB/"
 
 # Update TMB
 ```{r}
-load("/rsrch6/scratch/hema_bio-Malignan/wchen20/PCAWG/consensus_snv_indel/pcawg_HLAupdateMSS.RData")
+load("${path_rsrch}/PCAWG/consensus_snv_indel/pcawg_HLAupdateMSS.RData")
 number_mutations <- mutCountMatrix(pcawg_MSS, includeSyn = TRUE, countOnly = NULL, removeNonMutated = FALSE)
 number_mutations <- as.data.frame(number_mutations)
 number_mutations$gene <- rownames(number_mutations)
-write.csv(number_mutations, file = "/rsrch6/scratch/hema_bio-Malignan/wchen20/PCAWG/consensus_snv_indel/pcawg_HLAupdateMSS_num_mutations.csv", row.names = F)
+write.csv(number_mutations, file = "${path_rsrch}/PCAWG/consensus_snv_indel/pcawg_HLAupdateMSS_num_mutations.csv", row.names = F)
 ```
 
 # Divide TMB by human genome length

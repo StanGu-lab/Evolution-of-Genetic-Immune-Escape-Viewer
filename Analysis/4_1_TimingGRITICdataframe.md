@@ -6,14 +6,14 @@
 ```sh
 #BSUB -W 24:00
 #BSUB -q medium
-#BSUB –cwd /rsrch6/home/hema_bio-Malignan/Gu_lab_projects/WenjieChen/PCAWG/MHC_evolution/GRITIC
+#BSUB –cwd ${path_home}/PCAWG/MHC_evolution/GRITIC
 #BSUB –u wchen20@mdanderson.org
 #BSUB -n 12
 #BSUB -M 64
 #BSUB -R rusage[mem=64]
 #BSUB -P complex_timing_tcga
 #BSUB -J complex_timing_tcga
-#BSUB -o /rsrch6/home/hema_bio-Malignan/Gu_lab_projects/WenjieChen/PCAWG/MHC_evolution/GRITIC
+#BSUB -o ${path_home}/PCAWG/MHC_evolution/GRITIC
 
 module load python/3.11.3
 python ${path_home}/code/source/convert_to_csv20240327_tcga.py
@@ -71,7 +71,7 @@ for (proj in projects) {
   # SNV
   maf_gritic_path <- paste0("${path_rsrch}/PCAWG/consensus_snv_indel/vcf/", proj, "_filtered/annoted/")
   maf_files <- list.files(path = maf_gritic_path, pattern = ".consensus.20160830.filtered.somatic.snv_mnv.maf", recursive = FALSE, full.names = TRUE)
-  out_path <- paste0("/rsrch6/home/hema_bio-Malignan/Gu_lab_projects/WenjieChen/PCAWG/MHC_evolution/GRITIC/output/filtered/", proj)
+  out_path <- paste0("${path_home}/PCAWG/MHC_evolution/GRITIC/output/filtered/", proj)
   
   for (maf_file in maf_files) {
     
@@ -218,7 +218,7 @@ for (proj in projects) {
   
   subclone_path <- paste0(PCAWG_path, "/subclonal_reconstruction/20170325_consensus_subclonal_reconstruction_beta1.", proj)
   subclone_files <- list.files(path = subclone_path, pattern = "_subclonal_structure.txt.gz", recursive = FALSE, full.names = TRUE)
-  out_path <- paste0("/rsrch6/home/hema_bio-Malignan/Gu_lab_projects/WenjieChen/PCAWG/MHC_evolution/GRITIC/output/filtered/", proj)
+  out_path <- paste0("${path_home}/PCAWG/MHC_evolution/GRITIC/output/filtered/", proj)
   
   for (subclone_file in subclone_files) {
     
@@ -286,7 +286,7 @@ pip install matplotlib --user
 pip install gritic --user
 pip install numba --user
 
-cd /rsrch6/home/hema_bio-Malignan/Gu_lab_projects/WenjieChen/PCAWG/MHC_evolution/GRITIC
+cd ${path_home}/PCAWG/MHC_evolution/GRITIC
 griticnew_path="${path_home}/gritic"
 
 tumour_id="0009b464-b376-4fbc-8a56-da538269a02f"
@@ -295,8 +295,8 @@ purity="0.6"
 wgd="T"
 type="BLCA-US"
 dcc_project_code="BLCA-US"
-complextiming_path="/rsrch6/home/hema_bio-Malignan/Gu_lab_projects/WenjieChen/PCAWG/MHC_evolution/GRITIC/"
-output="/rsrch6/home/hema_bio-Malignan/Gu_lab_projects/WenjieChen/PCAWG/MHC_evolution/GRITIC/output/"
+complextiming_path="${path_home}/PCAWG/MHC_evolution/GRITIC/"
+output="${path_home}/PCAWG/MHC_evolution/GRITIC/output/"
 
 python ${griticnew_path}/rungritic_cmd.py -ARGS
 
@@ -385,7 +385,7 @@ python ${gritic_snv}/run_snv_timing.py --sample_id test --input_dir ./test_griti
 ```sh
 #BSUB -W 240:00
 #BSUB -q e40long
-#BSUB –cwd /rsrch6/home/hema_bio-Malignan/Gu_lab_projects/WenjieChen/PCAWG/MHC_evolution/GRITIC/
+#BSUB –cwd ${path_home}/PCAWG/MHC_evolution/GRITIC/
 #BSUB –u wchen20@mdanderson.org
 #BSUB -n 12
 #BSUB -M 400
@@ -590,7 +590,7 @@ APM = c("HLA-A", "HLA-B", "HLA-C","B2M", "NLRC5", "TAP1", "TAP2" ,"TAPBP", "PSMB
 
 PCAWG_path <- "${path_rsrch}/PCAWG"
 maf_path <- paste0(PCAWG_path, "/MHC_evolution/snv_indel/annoted_all")
-gritic_path <- "/rsrch6/home/hema_bio-Malignan/Gu_lab_projects/WenjieChen/PCAWG/MHC_evolution/GRITIC/output/SNV_timingnew/"
+gritic_path <- "${path_home}/PCAWG/MHC_evolution/GRITIC/output/SNV_timingnew/"
 
 projects <- c("tcga", "icgc")
 
@@ -809,107 +809,7 @@ for (file in mafgritic_files) {
 ```
 
 ## ----------------------------------------------------------
-## 6. Calculate the ratio for all mutations
-## ----------------------------------------------------------
-```sh
-module load R/4.1.0
-
-R
-```
-
-```R
-rm(list = ls())
-
-library(data.table)
-library(dplyr)
-library(ggplot2)
-library(bayestestR)
-library(matrixStats)
-library(furrr)
-library(future)
-
-PCAWG_path <- "${path_rsrch}/PCAWG"
-source("${path_home}/code/source/basic.R")
-source("${path_home}/code/source/insert_newlines.R")
-source("${path_home}/code/source/plot_segTiming.R")
-
-LOH_MSI <- fread("${path_rsrch}/PCAWG/donors_and_biospecimens/LOH_MSI_final.csv")
-column_names <- paste0("X", 0:249)
-path_gritic <- "${path_rsrch}/PCAWG/MHC_evolution/GRITIC/output/filtered/new/"
-breaks_seq <- seq(0, 1.05, by = 0.05)
-
-driver_mutations <- fread("${path_rsrch}/PCAWG/driver_mutations/drivermutation_all.csv") %>%
-  mutate(Hugo_Symbol = gene,
-         Reference_Allele = ref,
-         Tumor_Seq_Allele1 = ref,
-         Tumor_Seq_Allele2 = alt,
-         Tumor_Sample_Barcode = sample_id)
-
-mafgritic_files <- list.files(path = path_gritic, pattern = "mafgritic_*", recursive = FALSE, full.names = TRUE)
-mafgritic_files <- mafgritic_files[!grepl("mafgritic_ratio",mafgritic_files)]
-mafgritic_files <- mafgritic_files[!grepl("mafgritic_nonsyn_",mafgritic_files)]
-
-for (file in mafgritic_files) {
-
-  type = sub(".csv", "", basename(file))
-  type = sub("mafgritic_", "", type)
-
-  cat(paste0(type, "\n"))
-
-  timing_raw <- fread(file) %>% mutate(histology_abbreviation = type) %>% 
-  dplyr::select("Hugo_Symbol", "Chromosome", "Start_Position", "End_Position","Variant_Classification", 
-              "Variant_Type", "Reference_Allele", "Tumor_Seq_Allele1", "Tumor_Seq_Allele2", "Tumor_Sample_Barcode", "histology_abbreviation", all_of(column_names))
-  
-  timing_raw_nonsyn <- timing_raw %>% filter(Variant_Classification %in% non_syn)
-  write.csv(timing_raw_nonsyn, file = paste0(path_gritic, "/mafgritic_nonsyn_", type, ".csv"), row.names =F)
-
-  data_timing_drivermutations <- timing_raw %>%  
-  mutate(driver_gene = "yes",
-         Chromosome = as.character(Chromosome)) %>% 
-  inner_join(., driver_mutations, by = c("Hugo_Symbol", "Chromosome","Reference_Allele",  "Tumor_Seq_Allele1", "Tumor_Seq_Allele2", 
-  "Tumor_Sample_Barcode", "Start_Position", "End_Position"))
-  write.csv(data_timing_drivermutations, file = paste0(path_gritic, "/mafgritic_drivermutation_", type, ".csv"), row.names =F)
-
-  #if (!file.exists(paste0(path_gritic, "mafgritic_ratio_", type, ".csv"))) {
-
-  #timing_summary <- timing_raw %>%
-  #group_by(Tumor_Sample_Barcode) %>%
-  #summarise(
-  #  median_all = median(
-  #    unlist(across(all_of(column_names))),
-  #    na.rm = TRUE
-  #  ),
-  #  .groups = "drop"
-  #)
-  #write.csv(timing_summary, file = paste0(path_gritic, "/timing_median_", type, ".csv"), row.names =F)
-
-  #data_timing_ratio <- timing_raw %>% 
-  #inner_join(timing_summary, by = "Tumor_Sample_Barcode") %>%
-  #mutate(
-  #  pathway = Hugo_Symbol,
-  #  early_ratio = rowMeans(select(., all_of(column_names)) < median_all, na.rm = TRUE),
-  #  late_ratio  = rowMeans(select(., all_of(column_names)) > median_all, na.rm = TRUE),
-  #  subclonal_ratio = rowMeans(select(., all_of(column_names)) == 1.01, na.rm = TRUE)
-  #) %>%
-  #filter(!is.na(early_ratio)) %>%
-  #mutate(
-  #mean_value   = rowMeans(pick(all_of(column_names)), na.rm = TRUE),
-  #median_value = apply(pick(all_of(column_names)), 1, median, na.rm = TRUE),
-  #map_value    = apply(pick(all_of(column_names)), 1, function(x) map_estimate(x)$MAP)) %>%
-  #ungroup() %>%
-  #mutate(
-  #  early_bin = cut(early_ratio, breaks = breaks_seq, include.lowest = TRUE, right = FALSE),
-  #  late_bin  = cut(late_ratio,  breaks = breaks_seq, include.lowest = TRUE, right = FALSE)
-  #) %>%
-  #dplyr::select(-all_of(column_names))
-  #write.csv(data_timing_ratio, file = paste0(path_gritic, "/mafgritic_ratio_", type, ".csv"), row.names =F)
- 
-    #}
-}
-```
-
-## ----------------------------------------------------------
-## 7. Calculate the timing difference for all mutations
+## 6. The timing for all nonsynonymous mutations
 ## ----------------------------------------------------------
 ```sh
 module load R/4.1.0
@@ -975,106 +875,8 @@ data_timing_driver_all <- rbindlist(data_timing_driver)
 write.csv(data_timing_driver_all, file = paste0(path_gritic, "/nonsyn_filter_diff.csv"), row.names = F)
 ```
 
-```R
-rm(list = ls())
-
-library(data.table)
-library(dplyr)
-library(ggplot2)
-library(bayestestR)
-library(matrixStats)
-
-PCAWG_path <- "${path_rsrch}/PCAWG"
-source("${path_home}/code/source/basic.R")
-source("${path_home}/code/source/insert_newlines.R")
-source("${path_home}/code/source/plot_segTiming.R")
-
-LOH_MSI      <- fread("${path_rsrch}/PCAWG/donors_and_biospecimens/LOH_MSI_final.csv")
-column_names <- paste0("X", 0:249)
-path_gritic  <- "${path_rsrch}/PCAWG/MHC_evolution/GRITIC/output/filtered/"
-
-mafgritic_files <- list.files(path = path_gritic, pattern = "mafgritic_*", recursive = FALSE, full.names = TRUE)
-mafgritic_files <- mafgritic_files[!grepl("mafgritic_ratio_", mafgritic_files)]
-mafgritic_files <- mafgritic_files[grepl("*csv", mafgritic_files)]
-
-for (file in mafgritic_files) {
-
-  type <- sub(".csv", "", basename(file))
-  type <- sub("mafgritic_", "", type)
-  cat("Processing:", type, "\n")
-
-  timing_snvall <- fread(file) %>% as.data.frame() %>%
-    filter(!is.na(X0))
-  dim(timing_snvall)
-
-  # --- Background ---
-  df_background <- timing_snvall %>%
-    filter(Hugo_Symbol == "Unknown") %>%
-    mutate(sample_id = Tumor_Sample_Barcode) %>%
-    group_by(sample_id) %>%
-    summarise(across(all_of(column_names), ~ mean(., na.rm = TRUE)), .groups = "drop") %>%
-    mutate(event = "Background_p.A581V",
-           Hugo_Symbol = "Background") 
-
-  write.csv(df_background, paste0(path_gritic, "/timing_driverbackground_", type, ".csv"), row.names = FALSE)
-
-  # --- All mutations ---
-  timing_allmutations <- timing_snvall %>%
-    filter(Hugo_Symbol != "Unknown") %>%
-    mutate(
-      sample_id   = Tumor_Sample_Barcode,
-      Hugo_Symbol = paste0(Hugo_Symbol, "_", Chromosome, "_", Start_Position, "_", Tumor_Seq_Allele2),
-      event       = Hugo_Symbol
-    ) %>%
-    select(sample_id, Hugo_Symbol, event, all_of(column_names))
-    dim(timing_allmutations)
-
-  # --- Filter to common samples ---
-  common_samples      <- intersect(df_background$sample_id, timing_allmutations$sample_id)
-  df_background       <- df_background %>% filter(sample_id %in% common_samples)
-  timing_allmutations <- timing_allmutations %>% filter(sample_id %in% common_samples)
-  dim(timing_allmutations)
-
-  # --- Join and compute diff (mutation - background) ---
-  mut_mat <- timing_allmutations %>% select(all_of(column_names)) %>% as.matrix()
-  bg_mat  <- df_background %>%
-                left_join(timing_allmutations %>% select(sample_id), by = "sample_id") %>%
-                select(all_of(column_names)) %>% as.matrix()
-
-  diff_mat <- mut_mat - bg_mat
-
-  diff_dt <- timing_allmutations %>%
-    select(sample_id, event1 = Hugo_Symbol) %>%
-    bind_cols(as.data.frame(diff_mat))
-
-  dim(diff_dt)
-
-  # --- Summary stats ---
-  mat <- as.matrix(diff_dt %>% select(all_of(column_names)))
-
-  diff_dt <- diff_dt %>%
-    mutate(
-      aliquot_id         = sample_id,
-      pathway            = event1,
-      regulator          = "Driver",
-      mean_diff          = rowMeans(mat, na.rm = TRUE),
-      median_diff        = rowMedians(mat, na.rm = TRUE),
-      early_ratio        = rowMeans(mat < 0, na.rm = TRUE),
-      late_ratio         = rowMeans(mat > 0, na.rm = TRUE),
-      undetermined_ratio = rowMeans(mat == 0, na.rm = TRUE)
-    )
-
-  dim(diff_dt)
-
-  write.csv(diff_dt, paste0(path_gritic, "/diff_allmutations_", type, ".csv"), row.names = FALSE)
-
-  rm(timing_snvall, df_background, timing_allmutations, diff_dt, mat)
-  gc()
-}
-```
-
 ## ----------------------------------------------------------
-## 8. PhylogicNDT -- League model
+## 7. PhylogicNDT -- League model
 ## ----------------------------------------------------------
 ```sh
 module load python/2.7.18
@@ -1142,5 +944,4 @@ find ${base_dir} -type f -name "*log_odds*" -exec cp {} ${plot_dir} \;
 echo ${plot_dir}
 mkdir -p /Users/wchen20/Desktop/2026-02-16_Draft/Revision/R1Major5/pathway_min/min_5/all/PhylogicNDT/ColoRect-AdenoCA/
 scp -r wchen20@seadragon:${path_rsrch}/PCAWG/MHC_evolution/GRITIC/output/LeagueModel/PhylogicNDT/comp/no_median_League_plot//all/ColoRect-AdenoCA/* /Users/wchen20/Desktop/2026-02-16_Draft/Revision/R1Major5/pathway_min/min_5/all/PhylogicNDT/ColoRect-AdenoCA/
-
 ```

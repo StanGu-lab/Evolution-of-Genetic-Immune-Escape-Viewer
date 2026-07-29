@@ -9,7 +9,7 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-# Loading Packages
+# 0. Loading Packages
 ```{r}
 rm(list = ls())
 
@@ -31,9 +31,9 @@ suppressMessages(library("ggsci"))
 suppressMessages(library("cowplot"))
 suppressMessages(library("ggdist"))
 
-PCAWG_path <- ".../Project/"
-source(paste0(PCAWG_path, "/code/source/basic.R"))
+PCAWG_path <- "/Users/wchen20/Desktop/PCAWG/"
 source(paste0(PCAWG_path, "/code/source/oncoplot2.R"))
+source(paste0(PCAWG_path, "/code/source/basic.R"))
 
 LOH_MSI = LOH_mut <- fread(paste0(PCAWG_path, "/donors_and_biospecimens/LOH_MSI_final.csv"))
 LOH_type <- LOH_MSI %>% mutate(sample_id = aliquot_id) %>% dplyr::select(sample_id, histology_abbreviation)
@@ -41,24 +41,27 @@ LOH_aliquot <- LOH_MSI %>% mutate(sample_id = aliquot_id) %>% dplyr::select(samp
 LOH_MSS <- LOH_MSI %>% filter(MSI_mut == "MSS")
 sample_MSS <- LOH_MSS  %>% pull(aliquot_id)
 
-color_event <- c("Mut" = "#E64B35FF", "WT" = "#4DBBD5FF")
-color_APM_envet <- c("APM-Mutant" = "#E64B35FF", "APM-WT" = "#4DBBD5FF")
-figure_path <- ".../Project/Figures/20250813/"
+APM_noHLA <- c("B2M", "NLRC5", "TAP1", "TAP2" ,"TAPBP", "PSMB8", "PSMB9", "PSMB10", "ERAP1", "ERAP2")
+```
+
+# Set path
+```{r}
+path_figure <- "/Users/wchen20/Desktop/2026-02-16_Draft/Revision_Figures/Original_output/"
+
+path_HLAmutations <- "/Users/wchen20/Desktop/2026-02-16_Draft/Final_Results/1_APM/1_HLAmutations/"
+path_HLALOH <- "/Users/wchen20/Desktop/2026-02-16_Draft/Final_Results/1_APM/2_HLALOH/"
+path_HomoDeletion <- "/Users/wchen20/Desktop/2026-02-16_Draft/Final_Results/1_APM/3_HomozygousDeletion/"
+path_APMall <- "/Users/wchen20/Desktop/2026-02-16_Draft/Final_Results/1_APM/4_APMall/"
 ```
 
 # Combine HLA mutations and LOHHLA results
 ```{r}
-path_maf <- ".../Project/consensus_snv_indel/maf/maf_from_vcf/"
-
-onco_APM_update <- fread(paste0(path_maf, "onco_APM_update.txt"))
-
-## With homo deletion
-onco_hlaloh <- fread(".../Project/consensus_snv_indel/maf/onco_hlaloh.txt")
-
-## Without
-#onco_hlaloh <- fread(".../Project/consensus_snv_indel/maf/onco_hlaloh_nohomo.txt")
+onco_APM_update <- fread(paste0(path_HLAmutations, "onco_APM_update.txt"))
+onco_hlaloh <- fread(paste0(path_HLALOH, "/onco_hlaloh.txt"))
+onco_HD <- fread(paste0(path_HomoDeletion, "/onco_HD.txt"))
 
 mat1 <- rbind(onco_APM_update, onco_hlaloh, fill = TRUE) %>%
+  rbind(onco_HD, ., fill = TRUE) %>% 
   mutate(across(everything(), as.character)) %>%    
   column_to_rownames("V1") %>% dplyr::select(any_of(sample_MSS))
 
@@ -71,15 +74,19 @@ mat1[is.na(mat1)] <- ""
 mat1[mat1 == "0"] <- "" 
 dim(mat1)
 
-write.table(mat1, paste0(path_maf, "onco_APM_hlaloh.txt"), sep = "\t", quote = FALSE)
+write.table(mat1, paste0(path_APMall, "onco_APM_hlaloh.txt"), sep = "\t", quote = FALSE)
+
+row_order = c("HLALOH", "HLA-A", "B2M", "NLRC5", "TAP1", "HLA-B", "ERAP2", "TAP2", "TAPBP", "ERAP1", "PSMB8", "HLA-C", 
+              "PSMB10","PSMB9", "Homozygous Deletion")
 
 title = "Antigen Presentation Machinery"
-filename = paste0(figure_path, "/Figure1a.pdf")
+filename = paste0(path_APMall, "/SFigure2a.pdf")
 pdf(paste0(filename), width = 6.5, height = 2.5)
       ht1 <-  oncoPrint(mat1,
                         alter_fun = alter_fun,
                         alter_fun_is_vectorized = T,
                         pct_gp = gpar(fontsize = 7), 
+                        row_order = row_order,
                         col = col,
                         show_pct = T,
                         row_names_gp = gpar(fontsize = 7), 
@@ -95,7 +102,7 @@ dev.off()
 
 # Calculate the frequencies
 ```{r}
-mat1 <- fread(paste0(path_maf, "onco_APM_hlaloh.txt")) %>% 
+mat1 <- fread(paste0(path_APMall, "onco_APM_hlaloh.txt")) %>% 
   column_to_rownames("V1") %>% 
   as.matrix()
 
@@ -103,7 +110,8 @@ mat1 <- fread(paste0(path_maf, "onco_APM_hlaloh.txt")) %>%
 APM_mut <- as.data.frame(mat1) %>%
   rownames_to_column("Gene") %>%
   pivot_longer(-Gene, names_to = "aliquot_id", values_to = "Status") %>%
-  filter(Status != "")  %>% filter(Status != "HLALOH", aliquot_id %in% sample_MSS)
+  filter(Status != "")  %>% 
+  filter(Status != "HLALOH", Status != "Homozygous deletion", aliquot_id %in% sample_MSS)
 length(unique(APM_mut$aliquot_id))
 table(APM_mut$Gene)
 ## 188 + APM mutations in 154 patients (Some samples were marked as multi-hit)
@@ -116,6 +124,14 @@ APM_HLALOH <- as.data.frame(mat1) %>%
 length(unique(APM_HLALOH$aliquot_id))
 ## 438 patients with HLA LOH
 438/2625
+
+APM_HD <- as.data.frame(mat1) %>%
+  rownames_to_column("Gene") %>%
+  pivot_longer(-Gene, names_to = "aliquot_id", values_to = "Status") %>%
+  filter(Status != "") %>% filter(Status == "Homozygous deletion", aliquot_id %in% sample_MSS)
+length(unique(APM_HD$aliquot_id))
+## 9 patients with HLA LOH
+9/2625
 
 APM_HLAmut <- as.data.frame(mat1) %>%
   rownames_to_column("Gene") %>%
@@ -130,4 +146,85 @@ APM_nonHLAmut <- as.data.frame(mat1) %>%
   filter(Status != "") %>% filter(!Gene %in% c("HLA-A", "HLA-B", "HLA-C", "HLALOH"), aliquot_id %in% sample_MSS)
 length(unique(APM_nonHLAmut$aliquot_id))
 ## 131 non-HLA mutations in 110 samples
+```
+
+# 4. All APM evet
+```{r}
+mat1 <- fread(paste0(path_APMall, "/onco_APM_hlaloh.txt")) %>% 
+  column_to_rownames("V1") %>% 
+  as.matrix()
+
+## HLA point mutations
+long_HLA <- as.data.frame(mat1) %>%
+  rownames_to_column("Gene") %>%
+  pivot_longer(-Gene, names_to = "aliquot_id", values_to = "Status") %>%
+  filter(Status != "") %>%         # only keep mutated entries
+  filter(Gene %in% c("HLA-A", "HLA-B", "HLA-C")) %>% 
+  mutate(HLA_mut = "APM-Mutant") %>% 
+  distinct(aliquot_id, .keep_all = T) %>% 
+  dplyr::select("aliquot_id", "HLA_mut")
+
+## HLA LOH
+long_HLALOH <- as.data.frame(mat1) %>%
+  rownames_to_column("Gene") %>%
+  pivot_longer(-Gene, names_to = "aliquot_id", values_to = "Status") %>%
+  filter(Status != "") %>%         # only keep mutated entries
+  filter(Gene %in% c("HLALOH")) %>% 
+  mutate(HLALOHmut = "APM-Mutant") %>% 
+  distinct(aliquot_id, .keep_all = T) %>% 
+  dplyr::select("aliquot_id", "HLALOHmut")
+
+## APM_noHLA mut
+long_nonHLAmut <- as.data.frame(mat1) %>%
+  rownames_to_column("Gene") %>%
+  pivot_longer(-Gene, names_to = "aliquot_id", values_to = "Status") %>%
+  filter(Status != "") %>%         # only keep mutated entries
+  filter(Gene %in% APM_noHLA) %>% 
+  mutate(nonHLAmut = "APM-Mutant") %>% 
+  distinct(aliquot_id, .keep_all = T) %>% 
+  dplyr::select("aliquot_id", "nonHLAmut")
+
+## APM_noHLA mut biallelic activation
+long_nonHLAmut_B <- fread(paste0(path_HomoDeletion, "/mutLOH.csv")) %>% 
+  filter(MutLOH_class != "not_MutLOH") %>% 
+  mutate(nonHLAmut_B = "APM-Mutant",
+         aliquot_id = sample_id) %>% 
+  distinct(aliquot_id, .keep_all = T) %>% 
+  dplyr::select("aliquot_id", "nonHLAmut_B")
+
+## Homozygous delection
+long_homoDeletion <- fread(paste0(path_HomoDeletion, "/homoDeletion.csv"))  %>% 
+  mutate(nonHLAmut_HD = "APM-Mutant",
+         aliquot_id = sample_id) %>% 
+  distinct(aliquot_id, .keep_all = T) %>% 
+  dplyr::select("aliquot_id", "nonHLAmut_HD")
+
+## Combine
+HLALOH_pcawg_B <- fread("/Users/wchen20/Desktop/PCAWG/donors_and_biospecimens/LOH_MSI_final.csv") %>% 
+  subset(MSI_mut == "MSS") %>% 
+  left_join(., long_HLA, by = "aliquot_id") %>% 
+  left_join(., long_HLALOH, by = "aliquot_id") %>% 
+  left_join(., long_nonHLAmut, by = "aliquot_id") %>% 
+  left_join(., long_nonHLAmut_B, by = "aliquot_id") %>% 
+  left_join(., long_homoDeletion, by = "aliquot_id") %>% 
+  mutate(HLA_mut = ifelse(!is.na(HLA_mut), "Mutant", "WT"),
+         HLALOHmut = ifelse(!is.na(HLALOHmut), "Mutant", "WT"),
+         nonHLAmut = ifelse(!is.na(nonHLAmut), "Mutant", "WT"),
+         nonHLAmut_B = ifelse(!is.na(nonHLAmut_B), "Mutant", "WT"),
+         nonHLAmut_HD = ifelse(!is.na(nonHLAmut_HD), "Mutant", "WT"),
+         nonHLAmut_HD_1 = ifelse(nonHLAmut_HD == "Mutant", "Mutant", nonHLAmut_B),
+         nonHLAmut_B_1 = case_when(nonHLAmut_B == "Mutant" ~ "mutLOH", 
+                                   nonHLAmut_B != "Mutant" & nonHLAmut == "Mutant" ~ "non-mutLOH", 
+                                   TRUE ~ "WT"),
+         APM_Event = ifelse(HLA_mut == "Mutant"|HLALOHmut == "Mutant"|nonHLAmut == "Mutant"|nonHLAmut_HD=="Mutant", "APM-Mutant", "APM-WT"),
+         APM_Event = factor(APM_Event, levels = c("APM-WT", "APM-Mutant")),
+         APM_Event_B = ifelse(HLA_mut == "Mutant"|HLALOHmut == "Mutant"|nonHLAmut_B == "Mutant", "APM-Mutant", "APM-WT"),
+         APM_Event_B = factor(APM_Event_B, levels = c("APM-WT", "APM-Mutant")))
+
+table(HLALOH_pcawg_B$nonHLAmut_B_1)
+table(HLALOH_pcawg_B$APM_Event, HLALOH_pcawg_B$APM_Event_B)
+table(HLALOH_pcawg_B$nonHLAmut, HLALOH_pcawg_B$nonHLAmut_B)
+table(HLALOH_pcawg_B$nonHLAmut_HD_1)
+
+write.csv(HLALOH_pcawg_B, file = paste0(path_APMall, "LOH_MSI_final_B.csv"), row.names = F)
 ```

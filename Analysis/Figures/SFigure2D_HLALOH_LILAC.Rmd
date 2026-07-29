@@ -1,0 +1,150 @@
+---
+title: "Figures_V17_SFigure1BC"
+author: "AJ"
+date: "2025-08-05"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# 0. Loading Packages
+```{r}
+rm(list = ls())
+
+suppressMessages(library("ggplot2"))
+suppressMessages(library("patchwork"))
+suppressMessages(library("ggpubr"))
+suppressMessages(library("maftools"))
+suppressMessages(library("survival"))
+suppressMessages(library("survminer"))
+suppressMessages(library("tidyr"))
+suppressMessages(library("broom"))
+suppressMessages(library("data.table"))
+suppressMessages(library("dplyr"))
+suppressMessages(library("forcats"))
+suppressMessages(library("textshape"))
+suppressMessages(library("ggrepel"))
+suppressMessages(library("tibble"))
+suppressMessages(library("readr"))
+suppressMessages(library("ggradar"))
+suppressMessages(library("ggsci"))
+suppressMessages(library("cowplot"))
+suppressMessages(library("ggdist"))
+suppressMessages(library("openxlsx"))
+
+PCAWG_path <- "/Users/wchen20/Desktop/PCAWG/"
+source(paste0(PCAWG_path, "/code/source/basic.R"))
+source(paste0(PCAWG_path, "/code/source/oncoplot2.R"))
+```
+
+# Set path
+```{r}
+path_figure <- "/Users/wchen20/Desktop/2026-02-16_Draft/Revision_Figures/Original_output/"
+
+path_HLAmutations <- "/Users/wchen20/Desktop/2026-02-16_Draft/Final_Results/1_APM/1_HLAmutations/"
+path_HLALOH <- "/Users/wchen20/Desktop/2026-02-16_Draft/Final_Results/1_APM/2_HLALOH/"
+path_HomoDeletion <- "/Users/wchen20/Desktop/2026-02-16_Draft/Final_Results/1_APM/3_HomozygousDeletion/"
+path_APMall <- "/Users/wchen20/Desktop/2026-02-16_Draft/Final_Results/1_APM/4_APMall/"
+```
+
+# Expected call rates
+```{r}
+donor_clinical <- read.xlsx("/Users/wchen20/Desktop/PCAWG/donors_and_biospecimens/pcawg_donor_clinical_August2016_v9.xlsx", sheet = "pcawg_donor_clinical_August2016") %>% 
+  filter(donor_wgs_included_excluded != "Excluded") %>% dplyr::select(icgc_donor_id, donor_unique_id)
+
+df_HLALOH <- fread(paste0(path_HLALOH, "/df_HLALOH.csv")) %>% 
+  distinct(sample_id, .keep_all = T) %>% 
+  mutate(aliquot_id = sample_id) %>%
+  dplyr::select("aliquot_id", "HLALOH")
+
+LOH_MSI <- fread("/Users/wchen20/Desktop/PCAWG/donors_and_biospecimens/LOH_MSI_final.csv") %>% 
+  inner_join(donor_clinical, ., by = "donor_unique_id") %>%
+  left_join(., df_HLALOH, by = "aliquot_id") %>% 
+  dplyr::select(icgc_donor_id, histology_abbreviation, HLALOH)
+
+lilad <- read.xlsx(paste0(path_HLALOH, "/41588_2023_1367_MOESM6_ESM.xlsx"), sheet = "GIE per sample") %>%
+  filter(cohort == "PCAWG") %>% 
+  mutate(icgc_donor_id = sample_id_2) %>% 
+  dplyr::select(icgc_donor_id, loh_lilac) %>% 
+  inner_join(., LOH_MSI,  by = "icgc_donor_id") %>%
+  mutate(HLALOH = ifelse(is.na(HLALOH), "Neg", HLALOH))
+
+df_loh <- lilad %>%
+  mutate(loh_lilac = recode(as.character(loh_lilac),
+                       "FALSE" = "WT",
+                       "TRUE"  = "Mutant"),
+         HLALOH = recode(as.character(HLALOH),
+                    "Neg" = "WT",
+                    "Pos" = "Mutant"))
+
+table(df_loh$loh_lilac, df_loh$HLALOH)
+
+df_long <- df_loh %>%
+  select(histology_abbreviation, loh_lilac, HLALOH) %>%
+  pivot_longer(
+    cols = c(loh_lilac, HLALOH),
+    names_to = "type",
+    values_to = "status")
+
+df_plot <- df_long %>%
+  group_by(histology_abbreviation, type, status) %>%
+  summarise(n = n(), .groups = "drop") %>%
+  ungroup() %>%
+  mutate(status = factor(status, levels = c( "WT", "Mutant")))
+
+tab <- as.data.frame(table(df_loh$loh_lilac, df_loh$HLALOH))
+
+# Rename for clarity
+colnames(tab) <- c("loh_lilac", "HLALOH", "Freq")
+
+# Define consistency
+tab <- tab %>%
+  mutate(consistency = ifelse(loh_lilac == HLALOH, "Consistent", "Inconsistent"))
+
+plot_tab <- ggplot(tab, aes(x = HLALOH, y = loh_lilac, fill = consistency)) +
+  geom_tile(color = "black") +
+  geom_text(aes(label = Freq), size = 6) +
+  scale_fill_manual(
+    values = c("Consistent" = "#E0F3F8" , "Inconsistent" = "grey")
+  ) +
+  labs(x = "LOHHLA", y = "LILAC", fill = "") +
+  theme_minimal() +
+  theme(
+    axis.text = element_text(size = 14, color = "black", vjust = 0),
+    axis.title = element_text(size = 18),
+    legend.position = "none",
+    panel.grid = element_blank()
+  )
+
+ggsave(paste0(path_figure, "/SFigure2D1_lohtable.pdf"), plot = plot_tab, width = 4, height = 4)
+
+plot_loh <- ggplot(df_plot,
+                   aes(x = histology_abbreviation, y = n, fill = status)) +
+  geom_bar(stat = "identity", position = "stack", width = 0.9) +
+  facet_wrap(~type, nrow = 2) +
+  scale_fill_manual(values = c("WT" = "#4DBBD5", "Mutant" = "#E64B35")) +
+  labs(
+    x = "",
+    y = "Number of Samples",
+    fill = ""
+  ) +
+  theme_minimal() +
+  theme(
+    strip.text = element_text(size = 14, face = "bold"),
+    axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1,
+                               size = 12, colour = "black"),
+    axis.text.y = element_text(size = 12, colour = "black"),
+    axis.title.y = element_text(size = 14),
+    plot.margin = margin(t = 5, l = 30, r = 20, b = 10),
+    legend.position = "right",
+    panel.grid = element_blank(),
+    axis.line = element_line(color = "black"),
+    axis.ticks = element_line(color = "black")
+  )
+
+plot_loh
+
+ggsave(filename = paste0(path_figure, "/SFigure2D2_Expected_callrate.pdf"), plot = plot_loh, width = 12, height = 6, units = "in")
+```

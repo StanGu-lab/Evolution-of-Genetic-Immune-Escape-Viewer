@@ -1,0 +1,180 @@
+---
+title: "Figure2C"
+author: "AJ"
+date: "2025-08-23"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# 0. Library packages
+```{r}
+rm(list = ls())
+
+suppressMessages(library("ggplot2"))
+suppressMessages(library("patchwork"))
+suppressMessages(library("ggpubr"))
+suppressMessages(library("maftools"))
+suppressMessages(library("survival"))
+suppressMessages(library("survminer"))
+suppressMessages(library("tidyr"))
+suppressMessages(library("broom"))
+suppressMessages(library("data.table"))
+suppressMessages(library("dplyr"))
+suppressMessages(library("ggh4x"))
+suppressMessages(library("forcats"))
+suppressMessages(library("textshape"))
+suppressMessages(library("matrixStats"))
+suppressMessages(library("ggrepel"))
+suppressMessages(library("tibble"))
+suppressMessages(library("readr"))
+suppressMessages(library("ggradar"))
+suppressMessages(library("ggsci"))
+suppressMessages(library("cowplot"))
+suppressMessages(library("ggdist"))
+
+PCAWG_path <- "/Users/wchen20/Desktop/PCAWG/"
+gritic_path <- paste0(PCAWG_path, "/MHC_evolution/GRITIC/output")
+
+source("/Users/wchen20/Desktop/PCAWG/code/source/basic.R")
+source("/Users/wchen20/Desktop/PCAWG/code/source/EnrichedView_modified.R")
+source("/Users/wchen20/Desktop/PCAWG/code/source/insert_newlines.R")
+source("/Users/wchen20/Desktop/PCAWG/code/source/CRP_MAGEMSig0409.R")
+
+path_figure <- "/Users/wchen20/Desktop/2026-02-16_Draft/Revision_Figures/Original_output/Figures/Figure2/"
+date = "260406"
+```
+
+# 1. Combine all
+```{r}
+cell_types <- c("Tcells", "MHCregulators", "NKcells", "Macrophages", "GammadeltaTcells")
+regulators <- c("neg", "pos")
+
+CRISPR_path <- paste0("/Users/wchen20/Desktop/2026-02-16_Draft/Revision/R1Major2/005/Summary/MutationsFreq/260406/")
+file_path <- list.files(CRISPR_path, pattern = "_Freq_oncoMSS.csv", full.names = TRUE, recursive = TRUE)
+file_path <- grep(date, file_path, value = TRUE)
+
+Freq_all <- lapply(file_path, fread) %>% rbindlist()
+write.csv(Freq_all, file = "/Users/wchen20/Desktop/2026-02-16_Draft/Revision/R1Major2/005/Summary/MutationsFreq/260406/oncoMSS_PCAWG.csv", row.names = F)
+```
+
+# 2. Figure 2C -- Heatmap
+```{r}
+df <- fread("/Users/wchen20/Desktop/2026-02-16_Draft/Revision/R1Major2/005/Summary/MutationsFreq/260406/oncoMSS_PCAWG.csv") %>% 
+  mutate(pathway_new = gsub("\n", "", pathway_new)) %>% 
+  mutate(pathway_new = case_when(pathway_new == "Antigen Presentation via MHC-I" & cell_type == "MHCregulators" ~ paste0(pathway_new, " (MHC-I) "),
+                                 pathway_new == "Antigen Presentation via MHC-I" & cell_type == "Tcells" ~ paste0(pathway_new, " (Tcells) "),
+                                 pathway_new == "Antigen Processing and Presentation" & cell_type == "NKcells" ~ paste0(pathway_new, " (NKcells) "),
+                                 pathway_new == "IFNg Signaling" & cell_type == "NKcells" ~ paste0(pathway_new, " (NKcells) "),
+                                 pathway_new == "IFNg Signaling" & cell_type == "MHCregulators" ~ paste0(pathway_new, " (MHC-I)"),
+                                 pathway_new == "IFNg Signaling" & cell_type == "Tcells" ~ paste0(pathway_new, " (Tcells)"),
+                                 pathway_new == "Necroptosis" & cell_type == "Tcells" ~ paste0(pathway_new, " (Tcells)"),
+                                 pathway_new == "Necroptosis" & cell_type == "NKcells" ~ paste0(pathway_new, " (NKcells)"),
+                                 pathway_new == "Regulation of Autophagy" & cell_type == "MHCregulators" ~ paste0(pathway_new, " (MHC-I)"),
+                                 pathway_new == "Autophagy" & cell_type == "Tcells" ~ paste0(pathway_new, " (Tcells)"),
+                                 pathway_new == "HSWI SNF pathway_new" ~ "SWI/SNF pathway_new",
+                                 pathway_new == "TNF Pathway" & cell_type == "Tcells" ~ paste0(pathway_new, " (Tcells)"),
+                                 pathway_new == "TNF Pathway" & cell_type == "NKcells" ~ paste0(pathway_new, " (NKcells)"),
+                                 TRUE ~ pathway_new)) %>% filter(Sum > 5)
+
+order_type = df %>% arrange(histology_abbreviation) %>% pull(histology_abbreviation) %>% unique()
+order_all = c(order_type, "All")
+  
+df_all <- df %>% distinct(pathway_new, cell_type, regulator, percent_whole) %>% 
+  mutate(histology_abbreviation = "All",
+         percent_mut = percent_whole)
+
+df_plot <- rbind(df, df_all, fill = TRUE) %>%
+  filter(!is.na(percent_mut)) %>%
+  mutate(
+    percent_mut   = as.numeric(percent_mut),
+    percent_whole = as.numeric(percent_whole),
+
+    # X: alphabetical
+    histology_abbreviation = factor(
+      histology_abbreviation,
+      levels = order_all),
+
+    # Y: order pathways by max percent_whole (desc), then flip so highest at top
+    pathway_new = fct_rev(
+      fct_reorder(pathway_new, percent_whole, .fun = max, .desc = TRUE)
+    )
+  )
+
+y_labels <- df_plot %>%
+  distinct(pathway_new, cell_type) %>%
+  mutate(
+    label_col = case_when(
+      cell_type == "MHCregulators"   ~ "#1E90FF",
+      cell_type == "Tcells"          ~ "#00CD66",
+      cell_type == "NKcells"         ~ "#191970",
+      cell_type == "Macrophages"     ~ "orange",
+      cell_type == "GammadeltaTcells"~ "#008B8B",
+      TRUE ~ "black"
+    ),
+    pathway_colored = paste0("<span style='color:", label_col, "'>", pathway_new, "</span>")
+  )
+
+label_lookup <- setNames(y_labels$pathway_colored, y_labels$pathway_new)
+
+heatmap_plot <- df_plot %>%
+  ggplot(aes(x = histology_abbreviation, y = pathway_new, fill = percent_mut)) +
+  geom_tile(color = "black", linewidth = 0.1) +
+  scale_fill_gradientn(
+    colors = c("white", "#8E24AA", "#4A148C"),
+    name = "Frequency",
+    breaks = c(0, 0.15, 0.45),
+    labels = c("0%", "15%", "45%")
+  ) +
+  scale_y_discrete(labels = label_lookup) +   # 👈 apply colored labels
+  theme_minimal() +
+  theme(
+    panel.grid.major = element_line(color = "grey70", linewidth = 0.4),
+    panel.grid.minor = element_blank(),
+    axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5, size = 16, colour = "black"),
+    axis.text.y = element_markdown(hjust = 1, size = 16),  # 👈 enable HTML labels
+    axis.title.y = element_blank(),
+    axis.title.x = element_blank(),
+    legend.position = "top"
+  )
+
+ggsave(
+  filename = paste0(path_figure, "Figure2C1.pdf"),
+  plot = heatmap_plot,
+  width = 15,
+  height = 12)
+
+# color mapping for cell types
+cell_colors <- c(
+  "MHC-I regulation"   = "#1E90FF",
+  "T-cell killing"     = "#00CD66",
+  "NK-cell killing"    = "#191970",
+  "Macrophage killing" = "orange",
+  "gdT-cell killing"   = "#008B8B"
+)
+
+# Desired order (top-to-bottom in legend)
+cell_order <- c("MHC-I regulation", 
+                "T-cell killing", 
+                "NK-cell killing", 
+                "Macrophage killing", 
+                "gdT-cell killing")
+
+legend_df <- data.frame(cell_type = factor(names(cell_colors), levels = cell_order))
+
+legend_plot <- ggplot(legend_df, aes(x = 1, y = cell_type, color = cell_type)) +
+  geom_point(size = 4) +
+  scale_color_manual(values = cell_colors, name = "Cell type", breaks = cell_order) +
+  theme_void() +
+  theme(legend.position = "right")
+
+legend_plot
+
+ggsave(
+  filename = paste0(path_figure, "Figure2C2.pdf"),
+  plot = legend_plot,
+  width = 3,
+  height = 3)
+```

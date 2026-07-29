@@ -1,0 +1,254 @@
+---
+title: "Figure3E"
+author: "AJ"
+date: "2025-08-23"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Library packages
+```{r}
+rm(list = ls())
+
+library(dplyr)
+library(tidyr)
+library(ggplot2)
+library(ggforce)
+library(ggtext)  
+
+## Path
+PCAWG_path <- "/rsrch6/scratch/hema_bio-Malignan/wchen20/PCAWG"
+PCAWG_path <- "/Users/wchen20/Desktop/PCAWG"
+gritic_path <- paste0(PCAWG_path, "/MHC_evolution/GRITIC/output")
+
+source("/Users/wchen20/Desktop/PCAWG/code/source/basic.R")
+source("/Users/wchen20/Desktop/PCAWG/code/source/insert_newlines.R")
+source("/Users/wchen20/Desktop/PCAWG/code/source/plot_segTiming.R")
+
+## Clinical data
+LOH_MSI = LOH_mut <- fread(paste0(PCAWG_path, "/donors_and_biospecimens/LOH_MSI_final.csv"))
+
+LOH_type <- LOH_MSI %>% mutate(sample_id = aliquot_id) %>% dplyr::select(sample_id, histology_abbreviation)
+LOH_aliquot <- LOH_MSI %>% mutate(sample_id = aliquot_id) %>% dplyr::select(sample_id, icgc_sample_id, MSI_mut)
+sample_MSS <- LOH_MSI %>% filter(MSI_mut == "MSS") %>% pull(aliquot_id)
+type_list <- LOH_MSI %>% dplyr::select(aliquot_id, histology_abbreviation)
+
+## Timing of segment gain
+#seg <- fread(paste0(PCAWG_path, "/MHC_evolution/GRITIC/output/SNV_timing/wenjie_posterior_pcawg.tsv"))
+
+## Timing of WGD
+wgd_median <- fread("/Users/wchen20/Desktop/PCAWG/MHC_evolution/GRITIC/output/wgd_median.csv") %>% dplyr::select(wgd_mediantiming, sample_id)
+
+## Timing of non-synonymous mutations
+nonsyn_filter_nonPloy <- fread("/Users/wchen20/Desktop/PCAWG/MHC_evolution/GRITIC/output/filter/griticnon_filterclonal.tsv") %>%
+  dplyr::select(-matches("\\.y$"), -Sample) %>%
+  rename_with(~ str_replace_all(., "\\.x$", "")) %>% 
+  filter(sample_id %in% sample_MSS)
+
+sample_sucess <- unique(nonsyn_filter_nonPloy$sample_id)
+type_sucess <- nonsyn_filter_nonPloy %>% distinct(sample_id, histology_abbreviation) 
+freq_sucess <- as.data.frame(table(type_sucess$histology_abbreviation)) %>% 
+  setNames(c("histology_abbreviation", "Freq")) %>% filter(histology_abbreviation != "Cervix-AdenoCA") 
+
+## Save Path
+gritic_path = "/Users/wchen20/Desktop/PCAWG/MHC_evolution/GRITIC/output/250717/summary250717/"
+```
+
+# 2. Pathway Timing -- Median Timing
+```{r}
+# Driver mutation
+path_save = "/Users/wchen20/Desktop/PCAWG/MHC_evolution/GRITIC/output/allmutation/mafgritic_nonsyn/pathway/min_drivermutation_250/"
+path_plot = "/Users/wchen20/Desktop/2026-02-16_Draft/Revision/R1Major5/pathway_min/min_5/min_drivermutation/"
+path_figure = "/Users/wchen20/Desktop/2026-02-16_Draft/Revision_Figures/Original_output/Figures/"
+
+data_timing_ratio <- fread(paste0(path_save, "/nonsyn_filter_diff.csv")) %>% 
+  mutate(sample_id = Tumor_Sample_Barcode) %>% 
+  mutate(Tumor_Sample_Barcode %in% sample_sucess) %>% 
+  distinct(sample_id, .keep_all = F) %>% 
+  inner_join(LOH_type, by = "sample_id")
+
+freq_sucess <- as.data.frame(table(data_timing_ratio$histology_abbreviation))
+names(freq_sucess) <- c("histology_abbreviation", "Freq")
+
+# Process the data
+LOH_MSI_type <- LOH_MSI %>% filter(MSI_mut == "MSS") %>% dplyr::select(aliquot_id, histology_abbreviation)
+cell_types_order <- c("MHCregulators", "Tcells", "NKcells", "Macrophages", "GammadeltaTcells")
+cell_types_order <- rev(cell_types_order)
+regulator_order  <- c("Pos", "Neg")
+regulator_order  <- rev(regulator_order)
+scaling_factor   <- 2.5  
+
+diff_all <- fread("/Users/wchen20/Desktop/PCAWG/MHC_evolution/GRITIC/output/allmutation/mafgritic_nonsyn/pathway/min_drivermutation_250/diff_all.csv")
+
+data_bin <- diff_all %>%
+  group_by(pathway, histology_abbreviation) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  inner_join(., diff_all, by = c("histology_abbreviation", "pathway")) %>%
+  mutate(n_base = 1,
+         percent_base = n_base/count,
+         timing_bin = cut(median_value, breaks = range_breaks_median, include.lowest = TRUE),
+         regulator = ifelse(regulator == "pos", "Pos", "Neg")) %>% 
+  arrange(desc(count))
+
+slice_cols <- levels(data_bin$timing_bin)
+
+# default timing_bin palette if not provided
+if (is.null(color_vector)) {
+  pal <- grDevices::hcl.colors(length(slice_cols), "Set3")
+  names(pal) <- slice_cols
+  color_vector <- pal
+}
+
+# ======================
+# Filter + set orders (keep only Pos/Neg regulators; drop "other" celltype)
+# ======================
+data_all <- data_bin %>%
+  filter(regulator %in% regulator_order) %>%
+  mutate(
+    celltype  = factor(celltype,  levels = cell_types_order),
+    regulator = factor(regulator, levels = regulator_order)
+  )
+
+# ======================
+# Order pathways by celltype -> regulator -> count (desc) -> pathway
+# ======================
+order_tbl <- data_all %>%
+  group_by(celltype, regulator, pathway) %>%
+  summarise(n = n(), .groups = "drop") %>%
+  arrange(celltype, regulator, desc(pathway))
+
+y_levels <- unique(order_tbl$pathway)
+
+data_all <- data_all %>%
+  mutate(pathway = factor(pathway, levels = y_levels))
+
+# ======================
+# Prepare colored y-axis labels: color each pathway by its dominant celltype
+# ======================
+pathway_colors_map <- order_tbl %>%
+  group_by(pathway) %>%
+  slice_max(order_by = n, n = 1, with_ties = FALSE) %>%
+  ungroup() %>%
+  mutate(color = dplyr::case_when(
+    celltype == "MHCregulators"    ~ "#1E90FF",
+    celltype == "Tcells"           ~ "#00CD66",
+    celltype == "NKcells"          ~ "#191970",
+    celltype == "Macrophages"      ~ "orange",
+    celltype == "GammadeltaTcells" ~ "#008B8B",
+    TRUE ~ "black"
+  ))
+
+# vector of colors aligned to pathway factor levels
+y_label_colors <- pathway_colors_map$color[
+  match(levels(data_all$pathway), pathway_colors_map$pathway)
+]
+
+# colored HTML labels for ggtext
+y_labels_colored <- paste0(
+  "<span style='color:", y_label_colors, "'>",
+  levels(data_all$pathway),
+  "</span>"
+)
+
+data_wide <- data_all %>% 
+  filter(histology_abbreviation != "Cervix-AdenoCA") %>%
+  add_count(histology_abbreviation, pathway, name = "count_all") %>%
+  filter(count_all > 1) %>%
+  dplyr::count(histology_abbreviation, pathway, timing_bin, name = "count") %>%
+  mutate(timing_bin = factor(timing_bin, levels = slice_cols)) %>%
+  tidyr::complete(histology_abbreviation, pathway, timing_bin, fill = list(count = 0)) %>%
+  pivot_wider(names_from = timing_bin, values_from = count, values_fill = 0) %>%
+  dplyr::select(pathway, histology_abbreviation, all_of(slice_cols)) %>%
+  mutate(total = rowSums(across(all_of(slice_cols)), na.rm = TRUE)) %>%
+  left_join(freq_sucess, by = "histology_abbreviation") %>%
+  mutate(total_n = total / Freq,
+         histology_abbreviation = paste0(histology_abbreviation, " (n = ", Freq, ")"))
+
+x_levels <- unique(data_wide$histology_abbreviation)
+y_levels <- unique(data_wide$pathway)
+
+data_pies <- data_wide %>% 
+  pivot_longer(all_of(slice_cols), names_to = "timing_bin", values_to = "count") %>%
+  filter(count > 0) %>%
+  group_by(histology_abbreviation, pathway) %>%
+  mutate(
+    fraction = count / sum(count),
+    end   = cumsum(fraction) * 2 * pi,
+    start = lag(end, default = 0)
+  ) %>%
+  ungroup() %>%
+  mutate(
+    x = as.numeric(factor(histology_abbreviation, levels = x_levels)),
+    y = as.numeric(factor(pathway, levels = y_levels)),
+    radius = sqrt(total_n / pi) * scaling_factor
+  )
+
+# ======================
+# Manual size legend (values you care about)
+# ======================
+legend_values <- c(0.1, 0.2, 0.3, 0.4)
+
+legend_data <- data.frame(
+  total_n = legend_values,
+  radius = sqrt(legend_values / pi) * scaling_factor,
+  x = seq(from = min(data_pies$x, na.rm = TRUE),
+          length.out = length(legend_values),
+          by = 1),
+  y = max(data_pies$y, na.rm = TRUE) + 3
+)
+
+# ======================
+# Plot
+# ======================
+p <- ggplot(data_pies) +
+  ggforce::geom_arc_bar(
+    aes(
+      x0 = x, y0 = y,
+      r0 = 0, r = radius, # Keep radius unchanged
+      start = start, end = end,
+      fill = timing_bin
+    ),
+    color = NA, # Add white borders for segment distinction
+    size = 0, # Thicker border to separate segments
+    alpha = 1 # Slightly higher alpha for vivid colors
+  ) +
+  ggforce::geom_circle(
+    data = legend_data,
+    aes(x0 = x, y0 = y, r = radius),
+    color = "black", fill = NA, size = 0.5
+  ) +
+  geom_text(
+    data = legend_data,
+    aes(x = x + 0.4, y = y, label = total_n),
+    hjust = 0, size = 3
+  ) + 
+  scale_x_continuous(
+    breaks = unique(data_pies$x),
+    labels = unique(data_pies$histology_abbreviation),
+    expand = c(0, 0.2)
+  ) +
+  scale_y_continuous(
+    breaks = seq_along(levels(data_all$pathway)),
+    labels = y_labels_colored,
+    expand = c(0, 0.8)
+  ) +
+  coord_fixed(ratio = 1, clip = "on") + # Perfect circles
+  scale_fill_manual(values = color_vector_median) +
+  labs(x = NULL, y = NULL, fill = "Timing Bin") +
+  theme_minimal() +
+  theme(
+    plot.margin = margin(t = 10, b = 10, l = 5, r = 5),
+    axis.text.x = element_text(angle = 90, hjust = 1, size = 12, v = 0.5, color = "black"),
+    axis.text.y = ggtext::element_markdown(size = 12, margin = margin(r = 4)),
+    panel.grid = element_blank(),
+    axis.ticks = element_line(color = "black"),
+    axis.line = element_line(color = "black"),
+    legend.position = "none"
+  ) 
+
+# Save
+ggsave(paste0(path_figure, "/Figure4.pdf"), p, width = 10, height = 12, units = "in")
+```

@@ -1,0 +1,237 @@
+---
+title: "Figures_v17_Figure1bc"
+author: "AJ"
+date: "2025-08-07"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# 0. Library packages
+```{r}
+rm(list = ls())
+
+library("stringr")
+library("dplyr")
+library("patchwork")
+library("ggpubr")
+library("ggridges")
+library("truncnorm")
+library("tidyr")
+library("scatterpie")
+library("tidyselect")
+library("pillar")
+library("data.table")
+library("readr")
+library("ggplot2")
+library("openxlsx")
+library("ggrepel")
+library("tibble")
+library("textshape")
+library("matrixStats")
+library("GenomicRanges")
+library("broom")
+
+source("/Users/wchen20/Desktop/PCAWG/code/source/basic.R")
+source("/Users/wchen20/Desktop/PCAWG/code/source/insert_newlines.R")
+source("/Users/wchen20/Desktop/PCAWG/code/source/plot_segTiming.R")
+
+ciber_cols <- c("B cells naive", "B cells memory", "Plasma cells", "T cells CD8", "T cells CD4 naive", 
+                "T cells CD4 memory resting", "T cells CD4 memory activated", "T cells follicular helper", 
+                "T cells regulatory (Tregs)", "T cells gamma delta", "NK cells resting", "NK cells activated", 
+                "Monocytes", "Macrophages M0", "Macrophages M1", "Macrophages M2", "Dendritic cells resting", 
+                "Dendritic cells activated", "Mast cells resting", "Mast cells activated", "Eosinophils", 
+                "Neutrophils")
+
+cibercom_cols <- c("T_cells_CD8", "T_cells_CD4", "B_cells", "NK_cells", "Macrophage", "Dendritic_cells", "Mast_cells", "Neutrophils", "Eosinophils")
+
+# Genome length: 3000 (GIE paper)
+path_data <- "/Users/wchen20/Desktop/2026-02-16_Draft/Revision/R2Major9/"
+path_save = "/Users/wchen20/Desktop/2026-02-16_Draft/Revision/R2Minor1/"
+```
+
+# Set path
+```{r}
+path_figure <- "/Users/wchen20/Desktop/2026-02-16_Draft/Revision_Figures/Original_output/"
+
+path_HLAmutations <- "/Users/wchen20/Desktop/2026-02-16_Draft/Final_Results/1_APM/1_HLAmutations/"
+path_HLALOH <- "/Users/wchen20/Desktop/2026-02-16_Draft/Final_Results/1_APM/2_HLALOH/"
+path_HomoDeletion <- "/Users/wchen20/Desktop/2026-02-16_Draft/Final_Results/1_APM/3_HomozygousDeletion/"
+path_TMB <- "/Users/wchen20/Desktop/2026-02-16_Draft/Final_Results/2_TMB/"
+path_APMall <- "/Users/wchen20/Desktop/2026-02-16_Draft/Final_Results/1_APM/4_APMall/"
+path_ciber <- "/Users/wchen20/Desktop/2026-02-16_Draft/Final_Results/3_Cibersort/"
+```
+
+# 1. Figure 1b
+## TMB
+```{r pressure, echo=FALSE}
+HLALOH_pcawg <- fread(paste0(path_APMall, "LOH_MSI_final_B.csv")) %>% 
+  subset(MSI_mut == "MSS") %>% 
+  mutate(#APM_Event = ifelse(!is.na(APM_Event), "APM-Mutant", "APM-WT"),
+         APM_Event = factor(APM_Event, levels = c("APM-WT", "APM-Mutant"))) 
+table(HLALOH_pcawg$APM_Event)
+
+TMB_cbio <- fread(paste0(path_TMB, "/pcawg_HLAupdateMSS_TMB.csv")) %>% 
+  mutate(cibio_perMB = mutation_perMB,
+         cibio_perMB_log = log10(mutation_perMB))
+
+LOH_MSIpcawg <- HLALOH_pcawg %>%
+  filter(MSI_mut == "MSS") %>%
+  group_by(histology_abbreviation) %>%
+  mutate(distinct_count = n_distinct(APM_Event)) %>%
+  filter(distinct_count > 1) %>%
+  ungroup() %>%
+  inner_join(., TMB_cbio, by = "aliquot_id") 
+
+pvals <- LOH_MSIpcawg %>%
+  group_by(histology_abbreviation) %>%
+  summarise(
+    p = wilcox.test(cibio_perMB_log ~ APM_Event)$p.value,
+    .groups = "drop"
+  ) %>%
+  mutate(
+    p_adj = p.adjust(p),
+    label = paste0("FDR = ", signif(p_adj, 2))
+  )
+
+select_type <- filter(pvals, p_adj < 0.05) %>% pull(histology_abbreviation) 
+
+df_LOH_MSIpcawg <- LOH_MSIpcawg %>% filter(histology_abbreviation %in% select_type)
+
+y_max <- max(df_LOH_MSIpcawg$cibio_perMB_log, na.rm = TRUE)
+
+plot_TMB <- ggplot(df_LOH_MSIpcawg, aes(x = histology_abbreviation, y = cibio_perMB_log, fill = APM_Event)) +
+         geom_violin(trim = FALSE, scale = "width", color = NA) +
+         scale_fill_manual(values = color_APM_envet) +
+         theme(axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1, size = 16, colour = "black"),
+               axis.text.y = element_text(size = 16, colour = "black"),
+               axis.title.y = element_text(size = 16, margin = margin(r = 20)),
+         title = element_text(size = 16),
+         plot.margin = margin(t = 5, l = 20, r = 20, b = 5),
+         legend.text = element_text(size = 10), 
+         legend.title = element_text(size = 10),
+         legend.key.size = unit(0.5, "cm"), 
+         legend.spacing.x = unit(0.2, "cm"),     
+         panel.grid.major = element_blank(),
+         panel.grid.minor = element_blank(),
+         panel.background = element_blank(),
+         axis.line = element_line(color = "black"),
+         axis.ticks = element_line(color = "black"),
+         legend.position = "top") + 
+  scale_y_continuous(breaks = log10(c(0.1, 1, 10, 100, 1000, 10000)), 
+                     labels = c(0.1, 1, 10, 100, 1000, 10000)) + 
+  labs(x = "", y = "TMB", fill = "APM Events") +
+  ggtitle("") + 
+  stat_compare_means(aes(group = APM_event), method = "wilcox.test", label = "p.signif", size = 7) # Manually modify the significant stars
+
+ggsave(filename = paste0(path_figure, "/Figure1b.pdf"), plot = plot_TMB, width = 6, height = 4.5, units = "in")
+```
+
+# Figure 1c -- Cibersort
+## Linear regression for Cibersort
+```{r}
+## TMB
+TMB_cbio <- fread(paste0(path_TMB, "/pcawg_HLAupdateMSS_TMB.csv")) %>% 
+  mutate(cibio_perMB = mutation_perMB,
+         cibio_perMB_log = log10(mutation_perMB))
+
+## APM group
+HLALOH_pcawg <- fread(paste0(path_APMall, "LOH_MSI_final_B.csv")) %>% 
+  subset(MSI_mut == "MSS") %>% 
+  inner_join(., TMB_cbio, by = "aliquot_id") %>% 
+  mutate(#APM_Event = ifelse(!is.na(APM_Event), "APM-Mutant", "APM-WT"),
+         APM_Event = factor(APM_Event, levels = c("APM-WT", "APM-Mutant"))) %>% 
+  dplyr::select("submitted_specimen_id", "histology_abbreviation", "APM_Event", "purity", "ploidy", "wgd_status", "cibio_perMB")
+table(HLALOH_pcawg$APM_Event)
+
+ciber_all <- fread(paste0(path_ciber, "/ciber_all.csv"))
+
+filtered_data <- ciber_all %>% 
+  dplyr::select(-APM_Event) %>%
+  inner_join(HLALOH_pcawg, by = c("submitted_specimen_id", "histology_abbreviation")) %>%
+   mutate(T_cells_CD8 = `T cells CD8`,
+         T_cells_CD4 = `T cells CD4 naive`+`T cells CD4 memory resting`+`T cells CD4 memory activated`, 
+         B_cells = `B cells naive` + `B cells memory`,
+         NK_cells = `NK cells resting`+`NK cells activated`,
+         Macrophage = `Macrophages M0` + `Macrophages M1` + `Macrophages M2`,
+         Dendritic_cells = `Dendritic cells resting` + `Dendritic cells activated`,
+         Mast_cells = `Mast cells resting` + `Mast cells activated`,
+         Neutrophils = Neutrophils,
+         Eosinophils = Eosinophils) %>%
+  dplyr::select("histology_abbreviation", "APM_Event", all_of(cibercom_cols), "purity", "ploidy", "wgd_status", "cibio_perMB") %>%
+      pivot_longer(cols = all_of(cibercom_cols), 
+               names_to = "cell_type", values_to = "value") %>%
+  group_by(histology_abbreviation, cell_type) %>%
+  filter(length(unique(APM_Event)) == 2)  
+
+# Ratio for median value
+ratio_res <- filtered_data %>%
+  group_by(histology_abbreviation, cell_type, APM_Event) %>%
+  summarize(median_value = mean(value, na.rm = TRUE)) %>%
+  spread(APM_Event, median_value) %>%
+  mutate(ratio = `APM-Mutant` / `APM-WT`)
+
+lm_res <- filtered_data %>% 
+  mutate(wgd_status = as.factor(wgd_status)) %>% 
+  group_by(histology_abbreviation, cell_type) %>%
+  filter(n_distinct(APM_Event) >= 2) %>%  # APM_Event must still have 2+ levels
+  do({
+    df <- .
+    has_wgd <- n_distinct(df$wgd_status) >= 2
+    
+    formula <- if (has_wgd) {
+      value ~ APM_Event + wgd_status + cibio_perMB
+    } else {
+      value ~ APM_Event + cibio_perMB
+    }
+    
+    tidy(lm(formula, data = df))
+  }) %>%
+  filter(term == "APM_EventAPM-Mutant") %>%
+  group_by(histology_abbreviation) %>%
+  mutate(fdr = p.adjust(p.value, method = "fdr")) %>%
+  left_join(ratio_res, ., by = c("histology_abbreviation", "cell_type")) %>% 
+  filter(!ratio == 0 & !is.infinite(ratio) & !is.nan(ratio)) %>%  
+  group_by(histology_abbreviation) %>%
+  mutate(fdr = p.adjust(p.value, method = "fdr"),
+         log2Ratio = log2(ratio),
+         `-log10FDR` = -log10(fdr)) %>%
+  ungroup()
+
+# Summarize results
+significant_points <- subset(lm_res, fdr < 0.05)
+significant_type = unique(significant_points$histology_abbreviation)
+
+lm_selected <- lm_res %>% filter(histology_abbreviation %in% significant_type)
+
+plot_lm <- ggplot(lm_selected, aes(x = cell_type,  y = histology_abbreviation, fill = log2Ratio, size = -log10(fdr))) +
+  coord_flip() +
+  geom_point(shape = 21, colour = "black", stroke = 0.3, alpha = 1) +
+  scale_fill_gradient2(
+    low =  "#4DBBD5FF", high = "#E64B35FF", midpoint = 0,
+    limits = c(-3, 3), breaks = c(-3, 0, 3), labels = c("-3", "0", "3")
+  ) +
+  scale_size_continuous(
+    name = "FDR", range = c(2, 8),
+    breaks = c(1, 2, 3, 5), labels = c("0.1", "0.01", "0.001", "1e-5")
+  ) +
+  labs(x = "", y = "", fill = "Log2Ratio") +
+  geom_text(data = significant_points, aes(label = "*"), vjust = 0.8, color = "black") +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1, size = 16, color = "black"),
+    axis.text.y = element_text(size = 14, hjust = 1, color = "black"),
+    panel.grid.major = element_blank(),
+    panel.grid.minor = element_blank(),
+    panel.background = element_blank(),
+    legend.position = "top",
+    legend.title = element_text(size = 14),  # Legend title size
+    legend.text = element_text(size = 12),   # Legend tick label size
+    axis.line = element_line(color = "black"),
+    axis.ticks = element_line(color = "black")
+  )
+
+plot_lm
+ggsave(filename =  paste0(path_figure, "/Figure1c.pdf"), plot = plot_lm, width = 6, height = 5, units = "in")
+```

@@ -1,0 +1,322 @@
+---
+title: "Figure_V17_SFigure2"
+author: "AJ"
+date: "2025-08-14"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# 0. Load packacges
+```{r}
+rm(list = ls())
+
+library("stringr")
+library("dplyr")
+library("patchwork")
+library("ggpubr")
+library("ggridges")
+library("truncnorm")
+library("tidyr")
+library("scatterpie")
+library("tidyselect")
+library("pillar")
+library("data.table")
+library("readr")
+library("ggplot2")
+library("openxlsx")
+library("ggrepel")
+library("tibble")
+library("textshape")
+library("matrixStats")
+
+## Path
+PCAWG_path <- "/rsrch6/scratch/hema_bio-Malignan/wchen20/PCAWG"
+PCAWG_path <- "/Users/wchen20/Desktop/PCAWG"
+gritic_path <- paste0(PCAWG_path, "/MHC_evolution/GRITIC/output")
+
+source("/Users/wchen20/Desktop/PCAWG/code/source/basic.R")
+source("/Users/wchen20/Desktop/PCAWG/code/source/insert_newlines.R")
+source("/Users/wchen20/Desktop/PCAWG/code/source/plot_segTiming.R")
+source("/Users/wchen20/Desktop/PCAWG/code/source/plot_raincloud.R")
+
+## Timing of segment gain
+seg <- fread(paste0(PCAWG_path, "/MHC_evolution/GRITIC/output/SNV_timing/wenjie_posterior_pcawg.tsv"))
+
+## Timing of WGD
+wgd_median <- fread("/Users/wchen20/Desktop/PCAWG/MHC_evolution/GRITIC/output/wgd_median.csv") %>% dplyr::select(wgd_mediantiming, sample_id)
+
+## Timing of non-synonymous mutations
+nonsyn_filter_nonPloy <- fread("/Users/wchen20/Desktop/PCAWG/MHC_evolution/GRITIC/output/filter/griticnon_filterclonal.tsv") %>%
+  dplyr::select(-matches("\\.y$"), -Sample) %>%
+  rename_with(~ str_replace_all(., "\\.x$", "")) %>% 
+  filter(sample_id %in% sample_MSS)
+
+sample_sucess <- unique(nonsyn_filter_nonPloy$sample_id)
+rm(nonsyn_filter_nonPloy)
+```
+
+# Set Path
+```{r}
+path_figure <- "/Users/wchen20/Desktop/2026-02-16_Draft/Revision_Figures/Original_output/"
+
+gritic_path = "/Users/wchen20/Desktop/2026-02-16_Draft/Final_Results/8_MutationTiming/min_drivermutation_250/"
+path_timeline = "/Users/wchen20/Desktop/2026-02-16_Draft/Final_Results/8_MutationTiming/timeline/"
+```
+
+# 1. APM point mutations -- Sfigure 2
+```{r cars}
+### Clonal/subclonal APM
+nonsyn_filter <- fread(paste0(gritic_path, "/nonsyn_filter_diff.csv"))
+
+# 2.1.2 Select clonal/subclonal APM
+timing_APM <- nonsyn_filter %>% 
+  filter(!is.na(X0)) %>% 
+  filter(Tumor_Sample_Barcode %in% sample_MSS) %>%
+  filter(Tumor_Sample_Barcode %in% sample_sucess) %>%
+  filter(Hugo_Symbol %in% APM) %>%
+  mutate(subclonal_ratio = rowMeans(dplyr::select(., all_of(column_names)) == 1.01, na.rm = TRUE),
+         timing_gritic = ifelse(subclonal_ratio > 0.5, "subclonal", "clonal"),
+         sample_id = Tumor_Sample_Barcode) 
+
+## Selected
+timing_APMsample <- unique(timing_APM$sample_id)
+timing_APMselected <- timing_APM %>% dplyr::select(histology_abbreviation, sample_id, timing_gritic, all_of(column_names))
+
+## APM_MSS
+timing_APMMSS <- timing_APM 
+as.data.frame(table(timing_APMMSS$timing_gritic))
+
+## Clonal and subclonal
+clone <- timing_APMselected %>% filter(timing_gritic != "subclonal")
+# write.csv(clone, file = paste0(gritic_path,"/APM_clone.csv"), row.names = F)  
+# nrow(clone)
+# nrow(clone)/nrow(timing_APMselected)
+
+subclone <- timing_APMselected %>% filter(timing_gritic == "subclonal")
+# write.csv(subclone, file = paste0(gritic_path,"/APM_subclone.csv"), row.names = F)
+
+subcloneMSS <- timing_APMMSS %>% filter(timing_gritic == "subclonal")
+# write.csv(subcloneMSS, file = paste0(gritic_path,"/APM_subcloneMSS.csv"), row.names = F)
+# nrow(subcloneMSS)
+# nrow(subcloneMSS)/nrow(timing_APMMSS)
+```
+
+## 2. Clonal/Subclonal APM frequenies -- MSS
+```{r}
+LOH_MSS <- LOH_MSS %>% filter(aliquot_id %in% sample_sucess)
+
+# Generate the frequencies for each cancer type
+subclone_sum <- as.data.frame(table(LOH_MSS$histology_abbreviation)) %>% mutate(mut_type = "subclonal")
+names(subclone_sum) <- c("histology_abbreviation", "sum", "mut_type")
+
+clone_sum <- as.data.frame(table(LOH_MSS$histology_abbreviation)) %>% mutate(mut_type = "clonal")
+names(clone_sum) <- c("histology_abbreviation", "sum", "mut_type")
+
+freq_sum <- rbind(subclone_sum, clone_sum)
+
+# Frequencies for clonal/subclonal APM
+subclone_sample <- subcloneMSS %>% distinct(sample_id, .keep_all = TRUE)
+subclone_freq <- as.data.frame(table(subclone_sample$histology_abbreviation)) %>% mutate(mut_type = "subclonal")
+
+clone_sample <- cloneMSS %>% distinct(sample_id, .keep_all = TRUE)
+clone_freq <- as.data.frame(table(clone_sample$histology_abbreviation)) %>% mutate(mut_type = "clonal")
+
+freq <- rbind(clone_freq, subclone_freq)
+names(freq) <- c("histology_abbreviation", "sum_sub", "mut_type")
+#write.csv(freq, file = paste0(gritic_path,"/APMtimingMSS_freq.csv"), row.names = F)
+
+type_APM = unique(clone$histology_abbreviation)
+
+freq_all <- left_join(freq_sum, freq, by = c("histology_abbreviation", "mut_type")) %>% 
+  mutate(freq = sum_sub/sum) %>% 
+  filter(histology_abbreviation %in% type_APM) %>% 
+  mutate(type = factor(histology_abbreviation, levels = sort(unique(histology_abbreviation), decreasing = TRUE)))
+#write.csv(freq_all, file = paste0(gritic_path,"/APMtimingMSS_freqall.csv"), row.names = F)
+```
+
+## Clonal APM
+```{r}
+long_APM <- pivot_longer(data = cloneMSS, 
+                         cols = X0:X249, 
+                         names_to = "Time_Point", 
+                         values_to = "Value") %>% filter(!is.na(Value)) %>%
+  mutate(event = "APM Mutations") %>% 
+  left_join(., clone_sum, by = "histology_abbreviation") %>% 
+  mutate(type = histology_abbreviation,
+    type_com = paste0(histology_abbreviation, "(n=", sum, ")")) %>% 
+  dplyr::select(type_com, type, Time_Point, Value, event) %>% 
+  mutate(type_com = factor(type_com, levels = sort(unique(type_com), decreasing = TRUE)),
+         type = factor(type, levels = sort(unique(type), decreasing = TRUE)))
+
+plot_APMclonal <- raincloud_v3(
+  data = long_APM,
+  x = "type",
+  y = "Value",
+  mode = "mean",
+  title = "APM Point Mutations",
+  filename = "raincloud_single_color.pdf",
+  single_color = "#984EA3"
+)
+```
+
+## Subclonal APM
+```{r}
+freq_all <- freq_all %>% mutate(type = factor(type, levels = sort(unique(type), decreasing = FALSE)))
+
+plot_APMsubclonal <- ggplot(freq_all, aes(x = mut_type, y = type, size = freq, color = mut_type)) +
+  geom_point() +
+  scale_color_manual(values = c("clonal" = "#984EA3", "subclonal" = "#E41A1C")) +
+  ylab(label = "") +
+  xlab(label = "") +
+  theme(axis.text.x = element_text(angle = 90, size = 12, hjust = 1, vjust = 0.5, colour = "black"),
+        #axis.text.y = element_text(size = 12, colour = "black"),
+        #axis.text.x = element_blank(),
+        axis.text.y = element_blank(),
+        axis.title.y = element_text(size = 12),
+        axis.title.x = element_text(size = 12),
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.background = element_blank(),
+        #legend.position = "none",
+        panel.spacing = unit(1, "lines"),
+        legend.text = element_text(size = 8), 
+        legend.title = element_text(size = 10)) +
+  coord_fixed() +
+  guides(color = "none", size = guide_legend(title = "Freq")) 
+
+plot_APMsubclonal
+
+plot_APMsubclonal_check <- plot_APMsubclonal +  theme(axis.text.x = element_text(angle = 90, size = 12, hjust = 1, vjust = 0.5, colour = "black"),
+        axis.text.y = element_text(size = 12, colour = "black"))
+ggsave(plot = plot_APMsubclonal_check, filename = paste0(path_figure, "/SFigure16a2.pdf"),  width = 4, height = 6, units = "in")
+```
+
+## 4.1.5 Plot -- combine clonal and subclonal APM
+```{r}
+plot_APM <- plot_APMclonal + plot_APMsubclonal + patchwork::plot_layout(ncol = 2, widths = c(3, 1))
+plot_APM
+ggsave(plot = plot_APM, filename = paste0(path_figure, "/SFigure16a.pdf"),  width = 9, height = 9, units = "in")
+```
+
+# WGD timing
+```{r}
+type_HLALOH <- unique(long_early_HLALOH$type)
+
+wgd_median <- fread("/Users/wchen20/Desktop/PCAWG/MHC_evolution/GRITIC/output/wgd_median.csv") %>% 
+  mutate(aliquot_id = sample_id) 
+
+wgd_type <- as.data.frame(table(wgd_median$histology_abbreviation)) %>% 
+            mutate(type_num = paste0(Var1, "(n=", Freq, ")"))
+
+names(wgd_type) <- c("type", "Freq", "type_num")
+
+long_WGD <- wgd_median %>% mutate(type = histology_abbreviation) %>% 
+  dplyr::select(type, wgd_mediantiming) %>% 
+  mutate(Time_Point = "WGD",
+         Value = wgd_mediantiming,
+         event = "WGD") %>%
+  filter(type %in% type_HLALOH) %>% 
+  inner_join(wgd_type, by = "type") %>%  
+  dplyr::select(type, Time_Point, Value, event) %>% 
+  mutate(type = factor(type, levels = sort(unique(type), decreasing = TRUE)))
+```
+
+# HLALOH timing
+```{r}
+timing_HLALOH <- fread(paste0(gritic_path, "/diff_HLALOH.csv")) %>%
+  mutate(type = histology_abbreviation)
+
+early_HLALOH <- timing_HLALOH  %>% 
+  inner_join(wgd_type, by = "type") %>% 
+  dplyr::select(sample_id, type, type_num, X0:X249) %>%
+  filter(sample_id %in% sample_MSS)
+
+length(unique(early_HLALOH$sample_id))
+
+long_HLALOH <- pivot_longer(data = early_HLALOH, 
+                                  cols = X0:X249, 
+                                  names_to = "Time_Point", 
+                                  values_to = "Value") %>% 
+  filter(!is.na(Value)) %>% 
+  mutate(event = "HLALOH") %>%
+  dplyr::select(type_num, type, Time_Point, Value, event) %>% 
+  mutate(type_num = factor(type_num, levels = sort(unique(type_num), decreasing = TRUE)),
+         type = factor(type, levels = sort(unique(type), decreasing = TRUE)))
+```
+
+## HLA LOH
+```{r}
+plot_APMclonal <- raincloud_v3(
+  data = long_APM,
+  x = "type",
+  y = "Value",
+  mode = "mean",
+  title = "APM Point Mutations",
+  filename = "raincloud_single_color.pdf",
+  single_color = "#984EA3"
+)
+
+plot_HLALOH <- raincloud_v3(
+  data = long_HLALOH,
+  x = "type",
+  y = "Value",
+  mode = "mean",
+  title = "HLA LOH",
+  filename = paste0(path_figure, "/SFigure16_HLALOHtiming.pdf"),
+  single_color = "#CD6090"
+)
+
+plot_WGD <- raincloud_v3(
+  data = long_WGD,
+  x = "type",
+  y = "Value",
+  mode = "mean",
+  title = "WGD",
+  filename = paste0(path_figure, "/SFigure16_WGDtiming.pdf"),
+  single_color = "#191970"
+)
+
+Timing_all <- (plot_APMclonal | plot_APMsubclonal | plot_HLALOH | plot_WGD) + patchwork::plot_layout(ncol = 4, widths = c(1, 0.3, 1, 1))
+
+ggsave(filename = paste0(path_figure, "/SFigure16BC.pdf"), plot = Timing_all, width = 18, height = 8, units = "in")
+```
+
+# Combinded plots
+```{r}
+plot_APMclonal <- raincloud_v3(
+  data = long_APM,
+  x = "type",
+  y = "Value",
+  mode = "mean",
+  title = "APM Point Mutations",
+  filename = "raincloud_single_color.pdf",
+  single_color = "#984EA3"
+)
+
+plot_HLALOH <- raincloud_v3(
+  data = long_early_HLALOH,
+  x = "type",
+  y = "Value",
+  mode = "mean",
+  title = "HLA LOH",
+  filename = "raincloud_single_color.pdf",
+  single_color = "#CD6090"
+)
+
+plot_WGD <- raincloud_v3(
+  data = long_WGD,
+  x = "type",
+  y = "Value",
+  mode = "mean",
+  title = "WGD",
+  filename = "raincloud_single_color.pdf",
+  single_color = "#191970"
+)
+
+Timing_all <- (plot_APMclonal | plot_APMsubclonal | plot_HLALOH | plot_WGD) + patchwork::plot_layout(ncol = 4, widths = c(1, 0.3, 1, 1))
+
+ggsave(filename = paste0(path_figure, "/SFigure16.pdf"), plot = Timing_all, width = 18, height = 8, units = "in")
+```

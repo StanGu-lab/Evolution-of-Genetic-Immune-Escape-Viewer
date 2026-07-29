@@ -1,0 +1,396 @@
+---
+title: "Figures_V17_Figure4BC"
+author: "AJ"
+date: "2025-08-14"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# 0. Load packacges
+```{r}
+rm(list = ls())
+
+library("stringr")
+library("dplyr")
+library("patchwork")
+library("ggpubr")
+library("ggridges")
+library("truncnorm")
+library("tidyr")
+library("scatterpie")
+library("tidyselect")
+library("pillar")
+library("data.table")
+library("readr")
+library("ggplot2")
+library("openxlsx")
+library("ggrepel")
+library("tibble")
+library("textshape")
+library("matrixStats")
+library("cowplot")
+library("ggtext")
+
+## Path
+PCAWG_path <- "/rsrch6/scratch/hema_bio-Malignan/wchen20/PCAWG"
+PCAWG_path <- "/Users/wchen20/Desktop/PCAWG"
+gritic_path <- paste0(PCAWG_path, "/MHC_evolution/GRITIC/output")
+
+source("/Users/wchen20/Desktop/PCAWG/code/source/basic.R")
+source("/Users/wchen20/Desktop/PCAWG/code/source/insert_newlines.R")
+source("/Users/wchen20/Desktop/PCAWG/code/source/plot_segTiming.R")
+
+library(stringr)
+
+wrap_hanging <- function(label,
+                         width = 24,
+                         indent = 4){
+
+  ## detect italic labels
+  italic <- grepl("^<i>.*</i>$", label)
+
+  ## remove HTML tags temporarily
+  txt <- gsub("</?i>", "", label)
+
+  ## wrap text
+  lines <- str_wrap(txt, width = width) |>
+    strsplit("\n") |>
+    unlist()
+
+  ## add hanging indent to all but first line
+  if(length(lines) > 1){
+    indent_html <- paste(rep("&nbsp;", indent), collapse = "")
+    lines[-1] <- paste0(indent_html, lines[-1])
+  }
+
+  txt <- paste(lines, collapse = "<br>")
+
+  ## restore italics
+  if(italic)
+    txt <- paste0("<i>", txt, "</i>")
+
+  txt
+}
+```
+
+# Set path
+```{r}
+path_figure = "/Users/wchen20/Desktop/2026-02-16_Draft/Revision_Figures/"
+```
+
+## Make phylogicDNT plot
+```{r}
+driver_gene <- na.omit(driver_gene)
+
+names_new <- c("cohort", "event", "event_split", "type", "perm_run", "log_odds_early", "V1")
+path_Phy = "/Users/wchen20/Desktop/2026-02-16_Draft/Revision/R1Major5/pathway_min/min_5/min_drivermutation/PhylogicNDT/nocnv/"
+path_Phy = "/Users/wchen20/Desktop/2026-02-16_Draft/Revision/R1Major5/pathway_min/min_5/min_drivermutation/PhylogicNDT/wgd_hlaloh/"
+
+file_list <- list.files(path = path_Phy, pattern = "*log_odds.tsv", recursive = T, full.names = TRUE)
+file_list <- grep("_all", file_list, value = T)
+data_sub <- list()
+plot_combined <- list()
+p_violin <- list()
+p_bars <- list()
+
+for (file in file_list) {
+  path_save <- dirname(file)
+  
+  boot = basename(file)
+  boot = sub(".log_odds.tsv", "", boot)
+  type = sub("_.*$", "", boot)
+  
+  data_sub[[boot]] <- fread(file) %>%
+    filter(cohort != "Median")
+  
+  names(data_sub[[boot]]) <- names_new
+  data_sub[[boot]] <- data_sub[[boot]] %>% mutate(bootstrap = boot,
+                                                  event = ifelse(event == "INFgLoss", "IFNg Response Axis (Copy Number Loss)", event))
+  
+  prev_df <- fread(paste0(path_save,"/", boot, ".full_prevalence.tsv")) %>%
+    mutate(bootstrap = boot,
+           event = ifelse(event == "INFgLoss", "IFNg Response Axis (Copy Number Loss)", event))
+  #prev_df$event <- sapply(prev_df$event, insert_newlines_every_five_words)
+  
+  data <- data_sub[[boot]] %>% 
+    mutate(Estimate = type) %>% 
+    left_join(., prev_df, by = c("cohort", "event"))
+  
+  data$event <- sapply(data$event, insert_newlines_every_five_words)
+
+  summary_df <- data %>%
+  group_by(event) %>%
+  summarise(
+    median_beta = median(type, na.rm = TRUE),
+    lower95 = quantile(type, 0.025, na.rm = TRUE),
+    upper95 = quantile(type, 0.975, na.rm = TRUE),
+    mean_log_odds = mean(type, na.rm = TRUE),
+    n = n(),
+    .groups = "drop") %>% 
+  mutate(
+    color_group = case_when(
+      lower95 > 0 & upper95 > 0 ~ "Early",
+      lower95 < 0 & upper95 < 0 ~ "Late",
+      TRUE ~ "Undetermined"),
+    Gene = event) %>% 
+  arrange(median_beta)
+  
+  plot_df <- data %>%
+  left_join(
+    summary_df %>%
+      dplyr::select(
+        event,
+        median_beta,
+        lower95,
+        upper95,
+        color_group
+      ),
+    by = "event") %>% 
+    mutate(Estimate = type,
+               Gene = event) 
+  
+  gene_levels <- unique(summary_df$event)
+  
+  #italic_labels <- ifelse(
+  #gene_levels %in% driver_gene,
+  #paste0("*", gene_levels, "*"),   # markdown italics
+  #gene_levels)
+  
+  #italic_labels <- sapply(italic_labels, insert_newlines_every_five_words)
+  
+  italic_labels <- ifelse(
+    gene_levels %in% driver_gene,
+    paste0("<i>", gene_levels, "</i>"),
+    gene_levels)
+  
+  italic_labels <- sapply(
+    italic_labels,
+    wrap_hanging,
+    width = 22,
+    indent = 6)
+
+  plot_df <- plot_df %>%
+  mutate(
+    Gene = as.character(Gene),
+    Gene = factor(Gene, levels = gene_levels),
+    gene_id = as.numeric(Gene))
+  
+  prev_df <- fread(paste0(path_save,"/", boot, ".full_prevalence.tsv"))
+  prev_df$event <- sapply(prev_df$event, insert_newlines_every_five_words)
+  prev_df <- prev_df %>% mutate(Prevalence = (n_occur / n_samp)*100,
+                                event = factor(event, levels = gene_levels)) %>%
+                   filter(!is.na(event))
+  
+  type_num <- unique(prev_df$n_samp)
+  sampling = sub("^[^_]*_", "", boot)
+  
+  if (grepl("all", boot)) {
+    title = paste0(type, "\n", "(n = ", type_num, ")")
+  } else if (grepl("50|100|200|150", boot)) {
+    title = paste0(sampling, " Timing Samplings")
+  } else {
+    title = paste0(type, "\n", "(n = ", type_num, ")")
+  }
+  
+  max_value = abs(max(data$type))
+  min_value = abs(min(data$type))
+  y_lim <- round(max(max_value, min_value)) + 0.2
+  y_low = -y_lim
+  y_high = y_lim
+  
+  if (type %in% c("Eso-AdenoCA", "Lymph-BNHL", "Skin-Melanoma")) {
+    y_label_size = 10
+    x_label_size = 10
+    bar_size = 3
+  } else {
+    y_label_size = 12
+    x_label_size = 12
+    bar_size = 3.5
+  }
+    
+  ## violin plot
+  p_violin[[boot]] <- ggplot(plot_df, aes(x = Gene, y = Estimate)) +
+  geom_violin(
+    scale = "width",
+    trim = TRUE,
+    alpha = 0.7,
+    width = 0.6,      
+    fill = "#2e7d64",   
+    color = NA)  +
+  geom_boxplot(
+    width = 0.1,
+    outlier.shape = NA,
+    #color = "black",
+    alpha = 0.6) +
+  theme_cowplot() +
+  coord_flip(ylim = c(y_high, y_low)) +
+  scale_y_reverse() + 
+  scale_x_discrete(labels = setNames(italic_labels, gene_levels)) + 
+  scale_fill_manual(values = color_bin) +
+  ylab("relative log odds timing") +
+  xlab(NULL) +
+  ggtitle(title) +
+  theme(
+    axis.text.x = element_text(size = x_label_size, color = "black", hjust = 0.5),
+    axis.text.y = element_markdown(size = y_label_size, color = "black", hjust = 1, halign = 1),
+    axis.title.x = element_text(size = 12),
+    plot.title = element_text(size = 16, hjust = 0.5, face = "plain"),
+    axis.line = element_line(color = "black"),
+    axis.ticks = element_line(color = "black"),
+    axis.title.y = element_blank(),
+    axis.ticks.y = element_line(color = "black"),
+    axis.line.y = element_blank(),
+    axis.line.x = element_blank(),
+    panel.border = element_rect(
+      colour = "black",
+      fill = NA,
+      linewidth = 0.7
+    ),
+    legend.position = "none",
+    plot.margin = margin(t = 10, b = 10, l = 10, r = 0)
+  )
+
+  p_bars[[boot]] <- ggplot(
+  prev_df,
+  aes(y = event, x = Prevalence)) +
+  geom_col(
+    width = 0.6,
+    fill = "#2e7d64",
+    alpha = 0.7,
+  ) +
+  geom_text(
+    aes(label = paste0(round(Prevalence), "%")),
+    hjust = -0.1,
+    size = 3.5
+  ) +
+  coord_cartesian(clip = "off") +
+  scale_x_continuous(
+    expand = expansion(mult = c(0, 0.15))
+  ) +
+  theme_cowplot() +
+  theme(
+    axis.title = element_blank(),
+    axis.text.x= element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.line.x = element_blank(),
+    axis.line.y = element_blank(),
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank(),
+    panel.grid = element_blank(),
+    plot.margin = margin(t = 5, r = 25, b = 5, l = 5)
+  )
+  
+  p_bars
+  plot_combined[[boot]] <- p_violin[[boot]] + p_bars[[boot]] + plot_layout(widths = c(8, 2))
+  
+  ggsave(
+  filename = paste0(path_save, "/", boot, "_boot.pdf"),
+  plot = plot_combined[[boot]],
+  width = 6, height = 6, units = "in")
+  
+  if (grepl("all", boot)) {
+    ggsave(
+      filename = paste0(path_figure, "/SFigure_Timingline_", type, ".pdf"),
+      plot = plot_combined[[boot]],
+      width = 6, height = 6, units = "in")
+    
+    ggsave(filename = paste0(path_figure, "/SFigure_Timingline_", type, ".jpg"), 
+           plot = plot_combined[[boot]],
+           device = "jpeg",
+           width = 6,
+           height = 6,
+           units = "in",
+           dpi = 600,
+           bg = "white")
+  }
+}
+
+## Figure 5
+CRC_robust <- wrap_plots(
+  plot_combined[c(
+    "Lung-SCC_all",
+    "Head-SCC_all",
+    "Panc-AdenoCA_all"
+  )],
+  nrow = 1
+)
+
+ggsave(
+  filename ="/Users/wchen20/Desktop/2026-02-16_Draft/Revision_Figures/Original_output/Figure5.pdf",
+  plot = CRC_robust,
+  width = 17, height = 7, units = "in")
+
+## Revision
+CRC_robust <- wrap_plots(
+  plot_combined[c(
+    "ColoRect-AdenoCA_150",
+    "ColoRect-AdenoCA_200",
+    "ColoRect-AdenoCA_all"
+  )],
+  nrow = 1
+)
+
+ggsave(
+  filename ="/Users/wchen20/Desktop/2026-02-16_Draft/Revision/R1Major5/ColoRect-AdenoCA_robust.pdf",
+  plot = CRC_robust,
+  width = 18, height = 6, units = "in")
+
+SFigure_hlaloh <- wrap_plots(
+  plot_combined[c(
+    "ColoRect-AdenoCA_70",
+    "ColoRect-AdenoCA_80",
+    "ColoRect-AdenoCA_90"
+  )],
+  nrow = 1
+)
+
+ggsave(
+  filename ="/Users/wchen20/Desktop/2026-02-16_Draft/Revision/R1Major5/Subsampling.pdf",
+  plot = SFigure_hlaloh,
+  width = 18, height = 6, units = "in")
+
+CRC_robust <- wrap_plots(
+  plot_combined[c(
+    "Breast-AdenoCA_all",
+    "ColoRect-AdenoCA_all",
+    "Panc-AdenoCA_all"
+  )],
+  nrow = 1
+)
+
+ggsave(
+  filename ="/Users/wchen20/Desktop/2026-02-16_Draft/Revision/R1Major5/ColoRect-AdenoCA_significance.pdf",
+  plot = CRC_robust,
+  width = 18, height = 6, units = "in")
+
+Figure5 <- wrap_plots(
+  plot_combined[c(
+    "Breast-AdenoCA_all",
+    "ColoRect-AdenoCA_all",
+    "Panc-AdenoCA_all"
+  )],
+  nrow = 1
+)
+
+ggsave(
+  filename ="/Users/wchen20/Desktop/2026-02-16_Draft/Revision/R1Major5/ColoRect-AdenoCA_significance.pdf",
+  plot = CRC_robust,
+  width = 16, height = 6, units = "in")
+
+SFigure_hlaloh <- wrap_plots(
+  plot_combined[c(
+    "Breast-AdenoCA_all",
+    "Eso-AdenoCA_all",
+    "Panc-AdenoCA_all"
+  )],
+  nrow = 1
+)
+
+ggsave(
+  filename ="/Users/wchen20/Desktop/2026-02-16_Draft/Revision_Figures/Original_output/SFigures/HLALOH.pdf",
+  plot = SFigure_hlaloh,
+  width = 18, height = 6, units = "in")
+```

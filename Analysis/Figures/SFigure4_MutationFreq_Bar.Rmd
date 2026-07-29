@@ -1,0 +1,199 @@
+---
+title: "Figures_V17_Figure3E"
+author: "AJ"
+date: "2025-08-07"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Libray packages
+```{r}
+rm(list = ls())
+
+suppressMessages(library("ggplot2"))
+suppressMessages(library("patchwork"))
+suppressMessages(library("ggpubr"))
+suppressMessages(library("maftools"))
+suppressMessages(library("survival"))
+suppressMessages(library("survminer"))
+suppressMessages(library("tidyr"))
+suppressMessages(library("broom"))
+suppressMessages(library("data.table"))
+suppressMessages(library("dplyr"))
+suppressMessages(library("ggh4x"))
+suppressMessages(library("forcats"))
+suppressMessages(library("textshape"))
+suppressMessages(library("matrixStats"))
+suppressMessages(library("ggrepel"))
+suppressMessages(library("tibble"))
+suppressMessages(library("readr"))
+suppressMessages(library("ggradar"))
+suppressMessages(library("ggsci"))
+suppressMessages(library("cowplot"))
+suppressMessages(library("ggdist"))
+
+PCAWG_path <- "/Users/wchen20/Desktop/PCAWG/"
+gritic_path <- paste0(PCAWG_path, "/MHC_evolution/GRITIC/output")
+figure_path <- "/Users/wchen20/Desktop/PCAWG/Figures/20241203/"
+figure_path <- "/Users/wchen20/Desktop/PCAWG/Figures/20241231/"
+
+source("/Users/wchen20/Desktop/PCAWG/code/source/basic.R")
+source("/Users/wchen20/Desktop/PCAWG/code/source/EnrichedView_modified.R")
+source("/Users/wchen20/Desktop/PCAWG/code/source/insert_newlines.R")
+source("/Users/wchen20/Desktop/PCAWG/code/source/CRP_MAGEMSig0409.R")
+
+LOH_MSI = LOH_mut <- fread(paste0(PCAWG_path, "/donors_and_biospecimens/LOH_MSI_final.csv"))
+LOH_type <- LOH_MSI %>% mutate(sample_id = aliquot_id) %>% dplyr::select(sample_id, histology_abbreviation)
+LOH_aliquot <- LOH_MSI %>% mutate(sample_id = aliquot_id) %>% dplyr::select(sample_id, icgc_sample_id, MSI_mut)
+LOH_MSS <- LOH_MSI %>% filter(MSI_mut == "MSS")
+LOH_MSStcga <- LOH_MSI %>% filter(proj == "tcga")
+sample_MSS <- LOH_MSS  %>% pull(aliquot_id)
+```
+
+# Figure 3a
+```{r}
+figure_path = "/Users/wchen20/Desktop/PCAWG/Figures/20250818/"
+date = "250818"
+
+cell_types <- c("Tcells", "MHCregulators", "NKcells", "Macrophages", "GammadeltaTcells")
+regulators <- c("pos", "neg")
+
+for (cell_type in cell_types) {
+  combined_plot <- list()
+  for (reg in regulators) {
+  
+  # Define color based on regulator type
+  color <- if (reg == "pos") {
+    "#E68674"  # Light blue
+  } else if (reg == "neg") {
+    "#87AFC6"  # Light red
+  }
+  
+  CRISPR_path <- paste0("/Users/wchen20/Desktop/PCAWG/CRISPR/CRISPRscreen20240118/", cell_type)
+  
+  CRISPR_pathways <- read.csv(paste0(CRISPR_path, "/Summary/", cell_type, "_C5BP_", reg, "_list.csv"), header = T) 
+  
+  Freq_all <- fread(paste0(CRISPR_path, "/Summary/MutationsFreq/", date, "/", cell_type, "_Freq_oncoMSS.csv")) %>% filter(percent_mut < 1) %>%
+  mutate(pathway_new = sapply(pathway_new, insert_newlines_every_five_words), pathway_new)
+
+  # Select top pathways based on percent_whole
+  Freq_top <- Freq_all %>%
+    distinct(regulator, pathway, .keep_all = TRUE) %>%
+    filter(regulator == reg) %>%
+    group_by(regulator) %>%
+    slice_max(order_by = percent_whole, n = 8, with_ties = FALSE) %>%
+    mutate(Freq_num = percent_whole * nrow(LOH_MSS))
+  
+  Pathway_top <- Freq_top %>% pull(pathway)
+  
+  # Filter data for the top pathways and the current regulator
+  Freq_topcancer <- Freq_all %>%
+    filter(pathway %in% Pathway_top) %>%
+    filter(regulator == reg) %>%
+    mutate(Freq_num = percent_whole * nrow(LOH_MSS))
+  
+  cancer_max <- max(Freq_topcancer$percent_mut) + 0.05
+  pan_max <- max(Freq_top$percent_whole) + 0.05
+  
+  # Identify top labels for each pathway
+  top_labels <- Freq_topcancer %>%
+    group_by(pathway_new) %>%
+    slice_max(order_by = percent_mut, n = 1) %>%
+    ungroup()
+  
+  type_colors_named <- setNames(as.character(type_colors), names(type_colors))
+  top_labels <- top_labels %>%
+  mutate(dot_color = type_colors_named[histology_abbreviation])
+  
+  top_labels <- top_labels %>%
+  mutate(
+    dot_color = type_colors_named[histology_abbreviation],
+    histology_factor = factor(histology_abbreviation)
+  )
+  
+  fill_colors <- setNames(
+  type_colors_named[levels(top_labels$histology_factor)],
+  levels(top_labels$histology_factor))
+  
+  boxplot <- ggplot(Freq_topcancer, aes(x = pathway_new, y = percent_mut)) +
+     geom_boxplot(outlier.shape = NA, alpha = 0.9, color = "black", width = 0.5) +
+     geom_jitter(width = 0.2, size = 3, alpha = 0.7, shape = 21, fill = "grey", color = "black", stroke = 0.1) +
+     labs(y = "Cancer-type Specific", x = "") +
+     geom_point(
+     data = top_labels,
+     aes(x = pathway_new, y = percent_mut, fill = histology_factor),
+     size = 4,
+     shape = 21,
+     stroke = 0,
+     color = "black",
+     inherit.aes = FALSE) +
+    geom_text(
+    data = top_labels,
+    aes(x = pathway_new, y = percent_mut, label = histology_abbreviation),
+    hjust = 0.4, vjust = -0.5, size = 4, color = "black",
+    inherit.aes = FALSE
+    ) +
+   scale_fill_manual(values = fill_colors) +  
+   theme_minimal() +
+   theme(
+    axis.text.x = element_blank(),
+    axis.text.y = element_text(hjust = 1, size = 13, colour = "black"),
+    axis.title.y = element_text(size = 13, colour = "black"),
+    axis.title.x = element_blank(),
+    axis.ticks.x = element_blank(),
+    panel.grid.major = element_blank(),
+    legend.position = "none",
+    axis.line = element_line(color = "black"),
+    axis.ticks = element_line(color = "black"),
+    plot.margin = margin(t = 20, b = 5, l = 10, r = 5)
+  ) +
+  scale_y_continuous(limits = c(0, cancer_max))
+  
+  # Create the barplot
+  barplot <- ggplot(Freq_top, aes(x = pathway_new, y = percent_whole)) +
+    geom_bar(stat = "identity", alpha = 0.9, color = "black", width = 0.5, fill = color) +
+    labs(y = "Pan-cancer", x = "") +
+    theme_minimal() +
+    theme(
+      axis.text.x = element_text(angle = 30, hjust = 1, size = 14, colour = "black"),
+      axis.text.y = element_text(hjust = 1, size = 13, colour = "black"),
+      axis.title.y = element_text(size = 13, colour = "black"),
+      axis.title.x = element_blank(),
+      panel.grid.major = element_blank(),
+      legend.position = "none",
+      axis.line = element_line(color = "black"),
+      axis.ticks = element_line(color = "black"),
+      plot.margin = margin(t = 5, b = 20, l = 20, r = 5)
+    ) +
+    scale_y_continuous(limits = c(0, pan_max))
+  
+  combined_plot[[paste0(cell_type, "_", reg)]] <- plot_grid(boxplot, barplot, ncol = 1, align = "v", rel_heights = c(1, 1))
+  
+  ggsave(
+    filename = paste0(figure_path, "/", cell_type, "_", reg, ".pdf"),
+    plot = combined_plot[[paste0(cell_type, "_", reg)]],
+    width = 7.5,
+    height = 6
+  )
+  }
+  
+  combined_plot <- combined_plot[[1]] + combined_plot[[2]]
+  ggsave(
+    filename = paste0(figure_path, "/", cell_type, ".pdf"),
+    plot = combined_plot,
+    width = 14,
+    height = 5.5
+  )
+  
+    combined_plot <- combined_plot[[1]] / combined_plot[[2]]
+  ggsave(
+    filename = paste0(figure_path, "/", cell_type, "_h.pdf"),
+    plot = combined_plot,
+    width = 7,
+    height = 11
+  )
+}
+```

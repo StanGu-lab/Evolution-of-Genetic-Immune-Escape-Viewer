@@ -1,0 +1,126 @@
+---
+title: "Figure3D_APM_260528"
+author: "AJ"
+date: "2026-05-29"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# 0. Load packacges
+```{r}
+rm(list = ls())
+
+library("stringr")
+library("dplyr")
+library("patchwork")
+library("ggpubr")
+library("ggridges")
+library("truncnorm")
+library("tidyr")
+library("scatterpie")
+library("tidyselect")
+library("pillar")
+library("data.table")
+library("readr")
+library("ggplot2")
+library("openxlsx")
+library("ggrepel")
+library("tibble")
+library("textshape")
+library("matrixStats")
+
+## Path
+PCAWG_path <- "/rsrch6/scratch/hema_bio-Malignan/wchen20/PCAWG"
+PCAWG_path <- "/Users/wchen20/Desktop/PCAWG"
+gritic_path <- paste0(PCAWG_path, "/MHC_evolution/GRITIC/output")
+
+source("/Users/wchen20/Desktop/PCAWG/code/source/basic.R")
+source("/Users/wchen20/Desktop/PCAWG/code/source/insert_newlines.R")
+source("/Users/wchen20/Desktop/PCAWG/code/source/plot_segTiming.R")
+
+## Clinical data
+LOH_MSI = LOH_mut <- fread(paste0(PCAWG_path, "/donors_and_biospecimens/LOH_MSI_final.csv"))
+
+LOH_type <- LOH_MSI %>% mutate(sample_id = aliquot_id) %>% dplyr::select(sample_id, histology_abbreviation)
+LOH_aliquot <- LOH_MSI %>% mutate(sample_id = aliquot_id) %>% dplyr::select(sample_id, icgc_sample_id, MSI_mut)
+sample_MSS <- LOH_MSI %>% filter(MSI_mut == "MSS") %>% pull(aliquot_id)
+type_list <- LOH_MSI %>% dplyr::select(aliquot_id, histology_abbreviation)
+
+## Timing of non-synonymous mutations
+nonsyn_filter_nonPloy <- fread("/Users/wchen20/Desktop/PCAWG/MHC_evolution/GRITIC/output/filter/griticnon_filterclonal.tsv") %>%
+  dplyr::select(-matches("\\.y$"), -Sample) %>%
+  rename_with(~ str_replace_all(., "\\.x$", "")) %>% 
+  filter(sample_id %in% sample_MSS)
+
+sample_sucess <- unique(nonsyn_filter_nonPloy$sample_id)
+
+## Save Path
+gritic_path = "/Users/wchen20/Desktop/PCAWG/MHC_evolution/GRITIC/output/250717/summary250717/"
+path_timeline = "/Users/wchen20/Desktop/PCAWG/MHC_evolution/GRITIC/output/250717/summary250717/timeline/"
+
+path_figure <- "/Users/wchen20/Desktop/2026-02-16_Draft/Revision_Figures/Original_output/"
+```
+
+# APM timing
+```{r}
+diff_all <- fread("/Users/wchen20/Desktop/PCAWG/MHC_evolution/GRITIC/output/allmutation/mafgritic_nonsyn/pathway/min_drivermutation_250/diff_all_selected_drivermutation.csv") %>% 
+  filter(aliquot_id %in% sample_MSS)
+
+data_all <- diff_all %>% filter(pathway == "APM")
+
+data_filter1 <- data_all %>% group_by(pathway, histology_abbreviation) %>%
+  summarise(count = n()) %>%
+  ungroup() %>%
+  inner_join(., data_all, by = c("histology_abbreviation", "pathway")) %>%
+  mutate(n_base = 1,
+         percent_base = n_base/count,
+         timing_bin = cut(median_value, breaks = range_breaks_median, include.lowest = TRUE)) %>% 
+  arrange(desc(count)) %>%
+  filter(count > 4)
+
+data_filter <- data_filter1 %>%
+  group_by(histology_abbreviation) %>% 
+  summarise(Sum_determined = n()) %>% 
+  ungroup %>% 
+  inner_join(data_filter1, ., by = "histology_abbreviation")
+
+order_all <- data_filter %>% arrange(desc(histology_abbreviation)) %>% pull(histology_abbreviation) %>% unique()
+
+level_bin_meidan <- data_filter %>%
+     pull(timing_bin) %>%
+     unique() %>%
+     sort()
+
+data_bar <- data_filter %>% 
+  mutate(histology_abbreviation = factor(histology_abbreviation, levels = order_all),
+         timing_bin = factor(timing_bin, levels = rev(level_bin_meidan))) 
+
+timing_propAPM <- ggplot(data_bar, aes(x = histology_abbreviation, fill = timing_bin)) +
+  geom_bar(position = "fill") +
+  theme_minimal() +
+  labs(x = "",  y = "Proportion", fill = "Timing Probability", title = "") +
+  scale_fill_manual(values = color_vector_median, drop = FALSE) +
+  theme(axis.text.x = element_text(angle = 0, hjust = 0.5, vjust = 0.5, size = 18, colour = "black"),
+        axis.text.y = element_text(size = 14, colour = "black", hjust = 1),
+        plot.title = element_text(size = 20, vjust = 0.5),
+        axis.title.y = element_text(size = 18),
+        axis.title.x = element_text(size = 18),
+        legend.text = element_blank(),  
+        legend.title = element_text(size = 16),
+        legend.position = "none",
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        plot.margin = margin(0, 30, 5, 5)) +
+  coord_flip()
+
+plot_APM <- cowplot::plot_grid(timing_propAPM, 
+      legend, 
+      ncol = 2,  
+      rel_widths = c(1.5, 0.3))
+
+ggsave(filename = paste0(path_figure, "/Figure2D_APM.pdf"), plot = plot_APM,  width = 6, height = 5.5, units = "in")
+```
+

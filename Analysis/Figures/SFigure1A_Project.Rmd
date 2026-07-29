@@ -1,0 +1,138 @@
+---
+title: "SFigure1A"
+author: "AJ"
+date: "2026-04-06"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Libray packages
+```{r}
+rm(list = ls())
+
+suppressMessages(library("ggplot2"))
+suppressMessages(library("patchwork"))
+suppressMessages(library("ggpubr"))
+suppressMessages(library("maftools"))
+suppressMessages(library("survival"))
+suppressMessages(library("survminer"))
+suppressMessages(library("tidyr"))
+suppressMessages(library("broom"))
+suppressMessages(library("data.table"))
+suppressMessages(library("dplyr"))
+suppressMessages(library("ggh4x"))
+suppressMessages(library("forcats"))
+suppressMessages(library("textshape"))
+suppressMessages(library("matrixStats"))
+suppressMessages(library("ggrepel"))
+suppressMessages(library("tibble"))
+suppressMessages(library("readr"))
+suppressMessages(library("ggradar"))
+suppressMessages(library("ggsci"))
+suppressMessages(library("cowplot"))
+suppressMessages(library("ggdist"))
+
+PCAWG_path <- "/Users/wchen20/Desktop/PCAWG/"
+gritic_path <- paste0(PCAWG_path, "/MHC_evolution/GRITIC/output")
+
+source("/Users/wchen20/Desktop/PCAWG/code/source/basic.R")
+source("/Users/wchen20/Desktop/PCAWG/code/source/EnrichedView_modified.R")
+source("/Users/wchen20/Desktop/PCAWG/code/source/insert_newlines.R")
+source("/Users/wchen20/Desktop/PCAWG/code/source/CRP_MAGEMSig0409.R")
+
+LOH_MSI = LOH_mut <- fread(paste0(PCAWG_path, "/donors_and_biospecimens/LOH_MSI_final.csv"))
+LOH_type <- LOH_MSI %>% mutate(sample_id = aliquot_id) %>% dplyr::select(sample_id, histology_abbreviation)
+LOH_aliquot <- LOH_MSI %>% mutate(sample_id = aliquot_id) %>% dplyr::select(sample_id, icgc_sample_id, MSI_mut)
+LOH_MSS <- LOH_MSI %>% filter(MSI_mut == "MSS")
+LOH_MSStcga <- LOH_MSI %>% filter(proj == "tcga")
+sample_MSS <- LOH_MSS  %>% pull(aliquot_id)
+figure_path <- "/Users/wchen20/Desktop/2026-02-16_Draft/Revision_Figures/"
+```
+
+## Summary
+```{r}
+LOH_MSI <- fread("/Users/wchen20/Desktop/PCAWG/donors_and_biospecimens/LOH_MSI_final.csv") %>% filter(MSI_mut == "MSS")
+
+summary_proj <- LOH_MSI %>%
+  dplyr::count(histology_abbreviation, proj) %>%
+  pivot_wider(
+    names_from = proj,
+    values_from = n,
+    values_fill = 0
+  ) %>%
+  arrange(histology_abbreviation)
+
+prop_proj <- as.data.frame(table(LOH_MSI$histology_abbreviation, LOH_MSI$primary))
+
+summary_sampletype <- LOH_MSI %>%
+  dplyr::count(histology_abbreviation, primary) %>%
+  pivot_wider(
+    names_from = primary,
+    values_from = n,
+    values_fill = 0
+  ) %>%
+  mutate(
+    Total = rowSums(across(where(is.numeric)))
+  ) %>%
+  arrange(histology_abbreviation)
+
+summary <- inner_join(summary_proj, summary_sampletype, by = "histology_abbreviation")
+write.csv(summary, file= "/Users/wchen20/Desktop/2026-02-16_Draft/Revision/R2Major10/PCAWG_samplelist.csv", row.names = F)
+
+df_sorted <- LOH_MSI %>% 
+  mutate(project = ifelse(proj == "tcga", "TCGA", "ICGC")) %>%
+  group_by(histology_abbreviation) %>%
+  mutate(total_count = n()) %>%
+  ungroup() %>%
+  mutate(histology_abbreviation = fct_reorder(histology_abbreviation, total_count))
+
+plot_tumorstatus <- ggplot(df_sorted, aes(x = histology_abbreviation, fill = primary)) +
+  geom_bar() +
+  coord_flip() +
+  labs(
+    title = "Tumor Status",
+    x = "",
+    y = "Number",
+    fill = "Primary Group"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(colour = "black"),
+        axis.text.y = element_text(colour = "black"),
+        legend.title = element_text(size = 9),
+        legend.text = element_text(size = 8),
+        legend.key.size = unit(0.4, "cm"),
+        plot.title = element_text(vjust = 0.5)) +
+  scale_fill_manual(values = c(
+    "Primary" = "#377EB8",
+    "Metastatic" = "#E64B35FF",
+    "Recurrent" = "#00CD66"
+  ))
+
+plot_proj <-ggplot(df_sorted, aes(x = histology_abbreviation, fill = project)) +
+  geom_bar() +
+  coord_flip() +
+  labs(
+    title = "Project",
+    x = "",
+    y = "Number",
+    fill = "Project"
+  ) +
+  theme_minimal() +
+  theme(axis.text.x = element_text(colour = "black"),
+        axis.text.y = element_text(colour = "black"),
+        legend.title = element_text(size = 9),
+        legend.text = element_text(size = 8),
+        legend.key.size = unit(0.4, "cm"),
+        plot.title = element_text(vjust = 0.5)) +
+  scale_fill_manual(values = c(
+    "TCGA" = "#008B8B",
+    "ICGC" = "#7A378B"
+  ))
+
+plot_combined <- plot_proj + plot_tumorstatus 
+ggsave(filename = "/Users/wchen20/Desktop/2026-02-16_Draft/Revision/R2Major10/Overview.pdf", plot = plot_combined, width = 9, height = 5, units = "in")
+ggsave(filename = paste0(figure_path, "/SFigure1.pdf"), plot = plot_combined, width = 9, height = 5, units = "in")
+```

@@ -1,0 +1,86 @@
+---
+title: "Figures_V17_Figure3a"
+author: "AJ"
+date: "2025-08-14"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# 0. Load packacges
+```{r}
+rm(list = ls())
+
+library("stringr")
+library("dplyr")
+library("patchwork")
+library("ggpubr")
+library("ggridges")
+library("truncnorm")
+library("tidyr")
+library("scatterpie")
+library("tidyselect")
+library("pillar")
+library("data.table")
+library("readr")
+library("ggplot2")
+library("openxlsx")
+library("ggrepel")
+library("tibble")
+library("textshape")
+library("matrixStats")
+
+source("/Users/wchen20/Desktop/PCAWG/code/source/basic.R")
+source("/Users/wchen20/Desktop/PCAWG/code/source/insert_newlines.R")
+source("/Users/wchen20/Desktop/PCAWG/code/source/plot_segTiming.R")
+
+## Path
+PCAWG_path <- "/rsrch6/scratch/hema_bio-Malignan/wchen20/PCAWG"
+PCAWG_path <- "/Users/wchen20/Desktop/PCAWG"
+gritic_path <- paste0(PCAWG_path, "/MHC_evolution/GRITIC/output")
+
+## Clinical data
+LOH_MSI = LOH_mut <- fread(paste0(PCAWG_path, "/donors_and_biospecimens/LOH_MSI_final.csv"))
+
+LOH_type <- LOH_MSI %>% mutate(sample_id = aliquot_id) %>% dplyr::select(sample_id, histology_abbreviation)
+LOH_aliquot <- LOH_MSI %>% mutate(sample_id = aliquot_id) %>% dplyr::select(sample_id, icgc_sample_id, MSI_mut)
+sample_MSS <- LOH_MSI %>% filter(MSI_mut == "MSS") %>% pull(aliquot_id)
+```
+
+## Figure 1d
+### Figure 1d2
+```{r}
+## HLA_ABC
+HLA_ABC <- read_excel("/Users/wchen20/Desktop/PCAWG/CRISPR/37557169/1-s2.0-S0092867423007833-mmc1.xlsx", sheet = "Raw count_human HLA-ABC")  %>% mutate(Gene = sub("_(.*)", "", sgRNA)) %>% select(sgRNA, Gene, everything())
+write.table(HLA_ABC, "/Users/wchen20/Desktop/PCAWG/CRISPR/37557169/HLA_ABC.txt", sep="\t", row.names=FALSE, quote=FALSE)
+
+study <- "37557169"
+org = "hsa"
+cells = c("HLA_ABC")
+type = "MHC"
+CRP_MAGE(cells, "37557169", org, 1)
+```
+
+### Figure 1d3
+```{r}
+cell = "Positive Regulator"
+pos <- fread("/Users/wchen20/Desktop/PCAWG/Figures/0508/Figure3a/HLA_ABC_PathwayGOBP_pos100.csv") %>% 
+  mutate(Description = str_to_title(Description),
+                          Description = sapply(Description, insert_newlines_every_five_words2)) 
+
+top10_pos <- EnrichedView_modified(pos, top = 3, bottom = 5, mode = 1, title = cell)
+ggsave(paste0("/Users/wchen20/Desktop/PCAWG/Figures/0508/", cell, ".pdf"), top10_view, width = 5, height = 4, dpi = 300)
+
+cell = "Negative Regulator"
+neg <- fread("/Users/wchen20/Desktop/PCAWG/Figures/0508/Figure3a/HLA_ABC_PathwayGOBP_neg100.csv") %>% 
+  mutate(Description = str_to_title(Description),
+         Description = sapply(Description, insert_newlines_every_five_words2)) 
+
+top10_neg <- EnrichedView_modified(neg, top = 2, bottom = 5, mode = 1, title = cell)
+ggsave(filename = paste0(figure_path, cell, ".pdf"), top10_view, width = 5, height = 4, dpi = 300)
+
+reg = top10_pos + top10_neg
+ggsave(filename = paste0(figure_path, "/Figure3a3.pdf"), plot = reg, width = 10, height = 5, units = "in")
+```

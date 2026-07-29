@@ -5,11 +5,11 @@
 ```sh
 # https://github.com/McGranahanLab/bioinfcollab_cruklungcentre/blob/1023f0988c92dcfc404ff60d4a6af322c74a0ab5/singularity_recipes/lohhla.def#L6
 # https://www.dropbox.com/s/o68logeoyh82oph/tracerx.LOHHLA.31_04_21.R
-singularity shell -B ../home/wchen20/lohhla/:/data/ -B /rsrch6:/mnt ../home/wchen20/lohhla/lohhla_aj_v2.sif
+singularity shell -B ${path_home}/lohhla/:/data/ -B /rsrch6:/mnt ${path_home}/lohhla/lohhla_aj_v2.sif
 
-cd /mnt/home/hema_bio-Malignan/wchen20/lohhla/
-base_path=/mnt/home/hema_bio-Malignan/wchen20/lohhla
-HLAfastaLoc=/mnt/home/hema_bio-Malignan/wchen20/lohhla/lohhla_mcgranahan/mcgranahanlab-lohhla-e4c7d5e14c39/data/hla_all.fasta
+cd /mnt/home/.../lohhla/
+base_path=/mnt/home/.../lohhla
+HLAfastaLoc=/mnt/home/.../lohhla/lohhla_mcgranahan/mcgranahanlab-lohhla-e4c7d5e14c39/data/hla_all.fasta
 cd ${base_path}/test_out/
 out_path=${base_path}/test_out
 
@@ -30,20 +30,20 @@ Rscript /LOHHLA.R --patient_id sample \
 
 # Test for TCGA
 # Set the parameters by the NG paper: https://github.com/UMCUGenetics/Genetic-Immune-Escape/blob/16c772b0de8cb59f04537a1203110c89ae36dafe/0_process_data/GIE_events/run_lohhla.sh#L6
-cd ../Project/PCAWG/HLALOH/
+cd ${path_rsrch}/PCAWG/HLALOH/
 module load singularity/3.7.0
 
-singularity exec -B ../home/wchen20/lohhla/:/data/ -B /rsrch6:/mnt ../home/wchen20/lohhla/lohhla_aj_v2.sif bash /mnt/scratch/hema_bio-Malignan/wchen20/PCAWG/HLALOH/test.sh
+singularity exec -B ${path_home}/lohhla/:/data/ -B /rsrch6:/mnt ${path_home}/lohhla/lohhla_aj_v2.sif bash /mnt/scratch/.../PCAWG/HLALOH/test.sh
 
 cancer_type="COAD"
 #tumour_id="00aa769d-622c-433e-8a8a-63fb5c41ea42"
 #normal_id="ddfe45b0-0c9b-4b7f-9fb3-17715d85a63d"
 
-out_path=/mnt/scratch/hema_bio-Malignan/wchen20/PCAWG/HLALOH/${cancer_type}/${tumour_id}
+out_path=/mnt/scratch/.../PCAWG/HLALOH/${cancer_type}/${tumour_id}
 bam_path=/mnt/scratch/reflib/TCGA_restricted/TCGA_Bams/${cancer_type}/WGS
-poly_path=/mnt/scratch/hema_bio-Malignan/wchen20/PCAWG/HLAmutations/hg19/${cancer_type}/${tumour_id}
-solutions_path=/mnt/scratch/hema_bio-Malignan/wchen20/PCAWG/HLALOH/solutions
-ref_path=/mnt/home/hema_bio-Malignan/wchen20/lohhla/reference
+poly_path=/mnt/scratch/.../PCAWG/HLAmutations/hg19/${cancer_type}/${tumour_id}
+solutions_path=/mnt/scratch/.../PCAWG/HLALOH/solutions
+ref_path=/mnt/home/.../lohhla/reference
 
 normal_bam=$(find $bam_path -type f -name "*${normal_id}*_wgs_gdc_realn.bam" -print -quit)
 tumour_bam=$(find $bam_path -type f -name "*${tumour_id}*_wgs_gdc_realn.bam" -print -quit)
@@ -62,8 +62,7 @@ Rscript /LOHHLA.R --patient_id ${tumour_id} \
                           --hla_region_coordinates ${ref_path}/hla_hg38.csv \
                           --HLA_exons ${ref_path}/hla.dat \
                           --bedtools /bin/bedtools/bedtools \
-                          --plotting_step 
-
+                          --plotting_step
 ```
 
 ## ----------------------------------------------------------
@@ -79,56 +78,49 @@ R
 ## PCAWG-TCGA samples
 library("dplyr")
 library("data.table")
-path <- "../Project/PCAWG"
-solution_path <- "../Project/PCAWG/HLALOH/solutions"
-purity_pliody <- readRDS("../Project/PCAWG/consensus_cnv/purity_ploidy/finalPurity.Rds") %>% 
+path <- "${path_rsrch}/PCAWG"
+solution_path <- "${path_rsrch}/PCAWG/HLALOH/solutions"
+purity_pliody <- readRDS("${path_rsrch}/PCAWG/consensus_cnv/purity_ploidy/finalPurity.Rds") %>% 
                  mutate(tumorPurity = purity,
                         tumorPloidy = ploidy,
                         file_name = paste0(samplename,"_wgs_gdc_realn.bam")) %>%
                  select(file_name, tumorPurity, tumorPloidy)
 
-# Assuming your data frame is named "df" and it contains a column named "samplename"
-# Get unique sample names
 file_names <- unique(purity_pliody$file_name)
 
-# Split the data frame by sample name and write separate text files
 for (file in file_names) {
-  # Subset the data frame for the current sample name
   subset_df <- purity_pliody[purity_pliody$file_name == file, ]
   
   sample_name <- gsub("_wgs_gdc_realn.bam", "", file)
 
-  # Define the file name for the text file
   filename <- paste0(solution_path, "/", sample_name, "_solutions.csv")
   
-  # Write the subsetted data frame to a text file
   #write.table(subset_df, file = file_name, sep = "\t", quote = FALSE, row.names = FALSE)
   fwrite(subset_df, file = filename, sep = ",", col.names = FALSE)
 }
 
 ## PCAWG-ICGC samples
-sample_list <- fread("../Project/PCAWG/donors_and_biospecimens/paired_list/240822/undownloaded_paired.txt")
+sample_list <- fread("${path_rsrch}/PCAWG/donors_and_biospecimens/paired_list/240822/undownloaded_paired.txt")
 
 for (samplename in sample_list$id) {
 
       bam_name <- subset(sample_list, id == samplename) %>% pull(tumour_bam) %>% basename(.)
-      solutions <- fread(paste0("../Project/PCAWG/MHC_evolution/HLALOH/solutions/", samplename, "_solutions.csv")) %>% 
+      solutions <- fread(paste0("${path_rsrch}/PCAWG/MHC_evolution/HLALOH/solutions/", samplename, "_solutions.csv")) %>% 
       mutate(V1= bam_name)
       
-      filename = paste0("../Project/PCAWG/MHC_evolution/HLALOH/solutions/", samplename, "_solutions_new.csv")
+      filename = paste0("${path_rsrch}/PCAWG/MHC_evolution/HLALOH/solutions/", samplename, "_solutions_new.csv")
       fwrite(solutions, file = filename, sep = ",", col.names = FALSE)
 
 }
 ```
-
 
 ## ----------------------------------------------------------
 ## 3. Run for TCGA data
 ## ----------------------------------------------------------
 ```sh
 #!/bin/bash
-paired_base="../Project/PCAWG/MHC_evolution/HLALOH/paired_tcga_"
-base_dir="../Project/PCAWG/MHC_evolution"
+paired_base="${path_rsrch}/PCAWG/MHC_evolution/HLALOH/paired_tcga_"
+base_dir="${path_rsrch}/PCAWG/MHC_evolution"
 HLALOH_dir="${base_dir}/HLALOH/results/tcga/"
 HLAmut_dir="${base_dir}/HLAmutation/results/tcga"
 solutions_path="${base_dir}/HLALOH/solutions/"
@@ -142,9 +134,9 @@ for i in "remain"; do
   bsub <<EOF
 #BSUB -W 240:00
 #BSUB -q long
-#BSUB -o ../Project/PCAWG/MHC_evolution/HLALOH/ICGC_HLAHLOH_output_${i}_%J.log
-#BSUB -e ../Project/PCAWG/MHC_evolution/HLALOH/ICGC_HLAHLOH_error_${i}_%J.log
-#BSUB -cwd ../Project/PCAWG/MHC_evolution/HLALOH
+#BSUB -o ${path_rsrch}/PCAWG/MHC_evolution/HLALOH/ICGC_HLAHLOH_output_${i}_%J.log
+#BSUB -e ${path_rsrch}/PCAWG/MHC_evolution/HLALOH/ICGC_HLAHLOH_error_${i}_%J.log
+#BSUB -cwd ${path_rsrch}/PCAWG/MHC_evolution/HLALOH
 #BSUB -u wchen20@mdanderson.org
 #BSUB -n 24
 #BSUB -M 200
@@ -152,10 +144,10 @@ for i in "remain"; do
 #BSUB -P TCGA_HLALOH
 #BSUB -J TCGA_HLALOH_${i}
 
-bash ../home/wchen20/code/source/call_hlaloh.sh ${paired_list} ${base_dir} ${HLALOH_dir} ${HLAmut_dir} ${solutions_path} ${genome} ${job_num}
+bash ${path_home}/code/source/call_hlaloh.sh ${paired_list} ${base_dir} ${HLALOH_dir} ${HLAmut_dir} ${solutions_path} ${genome} ${job_num}
 
 ## Delete the temporal files
-find ../Project/PCAWG/MHC_evolution/HLALOH/results/ -type f \( -name "*.bam" -o -name "*.sam" -o -name "*.fastq" -o -name "*.fastq.gz" -o -name "*.bai" \) -exec rm -f {} +
+find ${path_rsrch}/PCAWG/MHC_evolution/HLALOH/results/ -type f \( -name "*.bam" -o -name "*.sam" -o -name "*.fastq" -o -name "*.fastq.gz" -o -name "*.bai" \) -exec rm -f {} +
 EOF
 
 done
@@ -166,8 +158,8 @@ done
 ## ----------------------------------------------------------
 ```sh
 #!/bin/bash
-paired_base="../Project/PCAWG/donors_and_biospecimens/paired_list/paired_icgc_"
-base_dir="../Project/PCAWG/MHC_evolution"
+paired_base="${path_rsrch}/PCAWG/donors_and_biospecimens/paired_list/paired_icgc_"
+base_dir="${path_rsrch}/PCAWG/MHC_evolution"
 HLALOH_dir="${base_dir}/HLALOH/results/icgc/"
 HLAmut_dir="${base_dir}/HLAmutation/results/icgc"
 solutions_path="${base_dir}/HLALOH/solutions/"
@@ -181,9 +173,9 @@ for i in {1..8}; do
   bsub <<EOF
 #BSUB -W 240:00
 #BSUB -q long
-#BSUB -o ../Project/PCAWG/MHC_evolution/HLALOH/ICGC_HLAHLOH_output_${i}_%J.log
-#BSUB -e ../Project/PCAWG/MHC_evolution/HLALOH/ICGC_HLAHLOH_error_${i}_%J.log
-#BSUB -cwd ../Project/PCAWG/MHC_evolution/HLALOH
+#BSUB -o ${path_rsrch}/PCAWG/MHC_evolution/HLALOH/ICGC_HLAHLOH_output_${i}_%J.log
+#BSUB -e ${path_rsrch}/PCAWG/MHC_evolution/HLALOH/ICGC_HLAHLOH_error_${i}_%J.log
+#BSUB -cwd ${path_rsrch}/PCAWG/MHC_evolution/HLALOH
 #BSUB -u wchen20@mdanderson.org
 #BSUB -n 24
 #BSUB -M 200
@@ -191,10 +183,10 @@ for i in {1..8}; do
 #BSUB -P ICGC_HLALOH
 #BSUB -J ICGC_HLALOH_${i}
 
-bash ../home/wchen20/code/source/call_hlaloh.sh ${paired_list} ${base_dir} ${HLALOH_dir} ${HLAmut_dir} ${solutions_path} ${genome} ${job_num}
+bash ${path_home}/code/source/call_hlaloh.sh ${paired_list} ${base_dir} ${HLALOH_dir} ${HLAmut_dir} ${solutions_path} ${genome} ${job_num}
 ## Delete the temporal files
 
-find ../Project/PCAWG/MHC_evolution/HLALOH/results/ -type f \( -name "*.bam" -o -name "*.sam" -o -name "*.fastq" -o -name "*.fastq.gz" -o -name "*.bai" \) -exec rm -f {} +
+find ${path_rsrch}/PCAWG/MHC_evolution/HLALOH/results/ -type f \( -name "*.bam" -o -name "*.sam" -o -name "*.fastq" -o -name "*.fastq.gz" -o -name "*.bai" \) -exec rm -f {} +
 EOF
 
 done
@@ -204,13 +196,13 @@ done
 ## 5. Summary the results
 ## ----------------------------------------------------------
 ```sh
-find ../Project/PCAWG/MHC_evolution/HLALOH/results/tcga \
+find ${path_rsrch}/PCAWG/MHC_evolution/HLALOH/results/tcga \
   -type f -name "*_LOHHLA.csv" \
   -exec grep -l "UnPairedPval_unique" {} + | wc -l
 
-find ../Project/PCAWG/MHC_evolution/HLALOH/results/icgc \
+find ${path_rsrch}/PCAWG/MHC_evolution/HLALOH/results/icgc \
   -type f -name "*_LOHHLA.csv" \
-  -exec grep -l "UnPairedPval_unique" {} + > ../Project/PCAWG/MHC_evolution/HLALOH/results/icgc_lohhlarun.txt
+  -exec grep -l "UnPairedPval_unique" {} + > ${path_rsrch}/PCAWG/MHC_evolution/HLALOH/results/icgc_lohhlarun.txt
 ```
 
 ## ----------------------------------------------------------
@@ -219,16 +211,112 @@ find ../Project/PCAWG/MHC_evolution/HLALOH/results/icgc \
 ```sh
 module load R/4.1.0
 
-path_code="../home/wchen20/code/source"
+path_code="${path_home}/code/source"
 
 type="icgc"
 type="tcga"
-path_basic="../Project/PCAWG/MHC_evolution/HLALOH/results/${type}/"
-path_output="../Project/PCAWG/MHC_evolution/HLALOH/results/${type}/"
+path_basic="${path_rsrch}/PCAWG/MHC_evolution/HLALOH/results/${type}/"
+path_output="${path_rsrch}/PCAWG/MHC_evolution/HLALOH/results/${type}/"
 Rscript ${path_code}/HLALOHtoDF.R -p ${path_basic} -t ${type} -o ${path_output}
 
 type="icgc"
 type="tcga"
-scp -r wchen20@seadragon:../Project/PCAWG/MHC_evolution/HLALOH/results/${type}/LOHHLA*.csv /Users/wchen20/Desktop/PCAWG/MHC_evolution/HLALOH/results
+scp -r wchen20@seadragon:${path_rsrch}/PCAWG/MHC_evolution/HLALOH/results/${type}/LOHHLA*.csv /Users/wchen20/Desktop/PCAWG/MHC_evolution/HLALOH/results
 ```
 
+## ----------------------------------------------------------
+## 6. Summary the results
+## ----------------------------------------------------------
+```sh
+module load R/4.1.0
+
+R
+```
+
+```r
+library(data.table)
+library(dplyr)
+library(tidyverse)
+library(patchwork)
+
+LOH_MSI <- fread("${path_rsrch}/PCAWG/donors_and_biospecimens/LOH_MSI_final.csv") %>% 
+filter(MSI_mut == "MSS")
+
+lohhla_tcgc <- fread("${path_rsrch}/PCAWG/MHC_evolution/HLALOH/results/tcga/LOHHLA_tcga_all.csv")
+lohhla_icgc <- fread("${path_rsrch}/PCAWG/MHC_evolution/HLALOH/results/icgc/LOHHLA_icgc_all.csv")
+
+lohhla_pcawg <- rbind(lohhla_tcgc, lohhla_icgc) %>% 
+                filter(HLALOH == "Pos") %>% 
+                mutate(aliquot_id = sample_id) %>% 
+                inner_join(LOH_MSI, by = "aliquot_id") %>% 
+                dplyr::select(mean_filtered_coverage_at_mismatch_allele1, mean_filtered_coverage_at_mismatch_allele2,HLAtype1Log2MedianCoverage, HLAtype2Log2MedianCoverage, histology_abbreviation, aliquot_id)
+
+## Filtered_coverage for HLA loci (For the revision - Reviewer 2 - Minor comment 2 )
+cov_mismatch_long <- lohhla_pcawg %>%
+  pivot_longer(
+    cols = c(mean_filtered_coverage_at_mismatch_allele1,
+             mean_filtered_coverage_at_mismatch_allele2),
+    names_to = "allele",
+    values_to = "coverage"
+  ) %>%
+  mutate(allele = recode(allele,
+    mean_filtered_coverage_at_mismatch_allele1 = "Allele 1",
+    mean_filtered_coverage_at_mismatch_allele2 = "Allele 2"
+  )) %>%
+  dplyr::select(histology_abbreviation, aliquot_id, allele, coverage)
+
+plot_mismatch_cov <- ggplot(cov_mismatch_long,
+                            aes(x = allele,
+                                y = coverage,
+                                fill = allele)) +
+  geom_boxplot(outlier.shape = NA, alpha = 0.8) +
+  geom_jitter(width = 0.2, size = 0.8, alpha = 0.4) +
+  facet_wrap(~ histology_abbreviation, scales = "free_y", nrow = 4) +
+  scale_fill_manual(values = c(
+    "Allele 1" = "#3C5488",
+    "Allele 2" = "#F39B7F"
+  )) +
+  labs(title = "Mean Filtered Coverage at Mismatch Alleles",
+       x = "",
+       y = "Mean Filtered Coverage") +
+  theme_bw() +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    strip.text = element_text(face = "bold"),
+    legend.title = element_blank()
+  )
+ggsave(filename = paste0("${path_rsrch}/PCAWG/MHC_evolution/HLALOH/results/Coverage.pdf"), plot = plot_mismatch_cov, width = 18, height = 8, units = "in")
+
+## Log2MedianCoverage for HLA loci
+cov_hla_long <- lohhla_pcawg %>%
+  pivot_longer(
+    cols = c(HLAtype1Log2MedianCoverage,
+             HLAtype2Log2MedianCoverage),
+    names_to = "allele",
+    values_to = "Log2MedianCoverage"
+  ) %>% mutate(allele = recode(allele,
+ HLAtype1Log2MedianCoverage = "Allele 1",
+ HLAtype2Log2MedianCoverage = "Allele 2"
+))  %>%
+  dplyr::select(histology_abbreviation, aliquot_id, allele, Log2MedianCoverage)
+
+plot_hla_cov <- ggplot(cov_hla_long,
+                       aes(x = allele,
+                           y = Log2MedianCoverage,
+                           fill = allele)) +
+  geom_boxplot(outlier.shape = NA, alpha = 0.7) +
+  geom_jitter(width = 0.2, size = 0.8, alpha = 0.4) +
+  facet_wrap(~ histology_abbreviation, scales = "free_y", nrow = 4) +
+  scale_fill_manual(values = c(
+    "Allele 1" = "#3C5488",
+    "Allele 2" = "#F39B7F"
+  )) +
+  labs(title = "HLA Type Log2 Median Coverage",
+       x = "",
+       y = "Log2 Median Coverage") +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1),
+        strip.text = element_text(face = "bold"))
+
+ggsave(filename = paste0("${path_rsrch}/PCAWG/MHC_evolution/HLALOH/results/Log2MedianCoverage.pdf"), plot = plot_hla_cov, width = 18, height = 8, units = "in")
+```

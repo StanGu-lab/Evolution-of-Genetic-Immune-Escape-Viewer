@@ -253,7 +253,7 @@ ui <- tagList(
                    width = 2,
                    selectInput(
                      "cohort_select", "Select Cohort",
-                     choices = c("PCAWG")
+                     choices = c("PCAWG", "POG570", "TCGA-OV", "CRC-Prognosis")
                    ),
                    actionButton("submit_btn", "Select"),
                    div(style = "margin-top: 15px;"),
@@ -279,7 +279,7 @@ ui <- tagList(
                    
                    # Cohort selector for this tab
                    selectInput("escape_cohort_select", "Select Cohort",
-                               choices = c("PCAWG")),
+                               choices = c("PCAWG", "POG570", "TCGA-OV", "CRC-Prognosis")),
                    actionButton("escape_submit_btn", "Select"),
                    tags$hr(),
                    # Cell type selector for specific tabs
@@ -291,8 +291,7 @@ ui <- tagList(
                    # Timeline specific controls
                    conditionalPanel(
                      condition = "input.crispr_tab_selected == 'Timeline'",
-                     uiOutput("timing_type_ui"),
-                     uiOutput("cell_type_timeline_ui")
+                     uiOutput("timing_type_ui")
                    ),
                    
                    # Single Pathway specific controls
@@ -362,7 +361,7 @@ ui <- tagList(
                    conditionalPanel(
                      condition = "input.gene_tab_selected == 'Mutation Frequency'",
                      selectInput("gene_cohort_select", "Select Cohort",
-                                 choices = c("PCAWG")),
+                                 choices = c("PCAWG", "POG570", "TCGA-OV", "CRC-Prognosis")),
                      actionButton("gene_submit_btn", "Select"),
                      tags$hr()
                    ),
@@ -626,7 +625,7 @@ server <- function(input, output, session) {
       labs(size = "", title = "", x = "", y = "", fill = "Cancer Type") +
       theme_minimal() +
       scale_fill_manual(values = cellline_colors) +
-      scale_x_discrete(drop = FALSE) +  # 👈 ensures all Study_2 labels show even if no data
+      scale_x_discrete(drop = FALSE) +  
       scale_y_discrete(labels = function(x) str_wrap(x, width = 40)) +
       theme(
         axis.text.x = element_text(angle = 90, hjust = 1, vjust = 0.5, size = 10, color = "black"),
@@ -732,7 +731,7 @@ server <- function(input, output, session) {
         distinct(aliquot_id, histology_abbreviation)
       
       # conditional update
-      if (input$cohort_select %in% c("PCAWG")) {
+      if (input$cohort_select %in% c("PCAWG", "POG570", "TCGA-OV", "CRC-Prognosis")) {
         updateSelectInput(
           session, "cancer_select",
           choices = c("All", base::unique(type_list$histology_abbreviation)),
@@ -1035,30 +1034,63 @@ server <- function(input, output, session) {
   })
   
   output$timing_plot <- renderPlot({
-    req(input$timing_type, input$cell_type_timeline, cohort_data())
     
-    cell_types <- if (input$cell_type_timeline == "All") {
-      unname(cell_type_files)
-    } else {
-      cell_type_files[[input$cell_type_timeline]]  
-    }
+    req(input$timing_type, cohort_data())
     
-    p <- plot_timing_summary(
-      diff_all = cohort_data()$diff_all,
-      driver_list = driver_list,
-      clinical_data = cohort_data()$clinical_data,
-      type = input$timing_type,
-      cell_type = cell_types
-    )
-    
-    if (!is.null(p)) {
-      return(p)
-    } else {
+    if (is.null(cohort_data()$diff_all_phy)) {
       return(
-        ggplot() + theme_void() +
-          annotate("text", x = 0.5, y = 0.5, label = "Insufficient data", size = 8, hjust = 0.5)
+        ggplot() +
+          theme_void() +
+          annotate(
+            "text",
+            x = 0.5, y = 0.5,
+            label = "Please select a cohort.",
+            size = 6
+          )
       )
     }
+    
+    data <- cohort_data()$diff_all_phy %>%
+      dplyr::filter(histology_abbreviation == input$timing_type)
+    
+    empty_plot <- ggplot() +
+      theme_void() +
+      annotate(
+        "text",
+        x = 0.5, y = 0.5,
+        label = "Insufficient data",
+        size = 8
+      )
+    
+    if (nrow(data) == 0) {
+      empty_plot
+    } else {
+      p <- plot_phy(data)
+      if (is.null(p)) empty_plot else p
+    }
+    
+    #cell_types <- if (input$cell_type_timeline == "All") {
+    #  unname(cell_type_files)
+    #} else {
+    #  cell_type_files[[input$cell_type_timeline]]
+    #}
+    
+    #p <- plot_timing_summary(
+    #  diff_all = cohort_data()$diff_all,
+    #  driver_list = driver_list,
+    #  clinical_data = cohort_data()$clinical_data,
+    #  type = input$timing_type,
+    #  cell_type = cell_types
+    #)
+    
+    #if (!is.null(p)) {
+    #  return(p)
+    #} else {
+    #  return(
+    #    ggplot() + theme_void() +
+    #      annotate("text", x = 0.5, y = 0.5, label = "Insufficient data", size = 8, hjust = 0.5)
+    #  )
+    #}
   })
   
   # Survival -- make survival plot by mutation timing
@@ -1091,9 +1123,9 @@ server <- function(input, output, session) {
       
       data_survival <- cohort_data()$surv_data
       diff_all <- cohort_data()$diff_all %>%
-        mutate(Timing_group = case_when(early_ratio > 0.5 ~ "Mut_Early",
-                                        late_ratio > 0.5 ~ "Mut_Late",
-                                        TRUE ~ "Undetermined")) %>%
+        #mutate(Timing_group = case_when(early_ratio > 0.5 ~ "Mut_Early",
+        #                                late_ratio > 0.5 ~ "Mut_Late",
+        #                               TRUE ~ "Undetermined")) %>%
         filter(Timing_group != "Undetermined")
       
       sample_survival <- base::unique(data_survival$aliquot_id)
@@ -1101,7 +1133,7 @@ server <- function(input, output, session) {
       
       data_survival_sub <- if (histology_type == "All") data_survival else filter(data_survival, histology_abbreviation == histology_type)
       diff_all_sub <- if (histology_type == "All") diff_all else filter(diff_all, histology_abbreviation == histology_type)
-      
+              
       filtered_data <- diff_all_sub %>%
         filter(pathway == selected_pathways) %>%
         left_join(data_survival_sub, .,by = "aliquot_id") %>%
@@ -1109,7 +1141,7 @@ server <- function(input, output, session) {
           Timing_group = ifelse(is.na(Timing_group), "WT", Timing_group),
           Timing_group = factor(Timing_group, levels = c("WT", "Mut_Early", "Mut_Late"))
         )
-      
+
       plot_survival_by_timing(
         filtered_data = filtered_data,
         wt_included = "no",
@@ -1152,9 +1184,9 @@ server <- function(input, output, session) {
       
       ciber_all <- cohort_data()$ciber_all
       diff_all <- cohort_data()$diff_all %>%
-        mutate(Timing_group = case_when(early_ratio > 0.5 ~ "Mut_Early", 
-                                        late_ratio > 0.5 ~ "Mut_Late",
-                                        TRUE ~ "Undetermined")) %>% 
+        #mutate(Timing_group = case_when(early_ratio > 0.5 ~ "Mut_Early", 
+        #                                late_ratio > 0.5 ~ "Mut_Late",
+        #                                TRUE ~ "Undetermined")) %>% 
         filter(Timing_group != "Undetermined")
       
       diff_all_sub <- if (histology_type == "All") diff_all else filter(diff_all, histology_abbreviation == histology_type)
@@ -1776,8 +1808,11 @@ server <- function(input, output, session) {
     }
     
     tagList(
-      fluidPage(
-        withSpinner(plotOutput("timing_plot", width = "1000px", height = "900px"))
+      div(
+        style = "display: flex; justify-content: center;",
+        withSpinner(
+          plotOutput("timing_plot", width = "500px", height = "600px")
+        )
       ),
       br(),
       uiOutput("timeline_interpretation")

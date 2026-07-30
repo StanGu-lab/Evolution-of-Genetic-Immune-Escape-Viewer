@@ -66,6 +66,7 @@ load_data_files <- function() {
 data_list <- load_data_files()
 list2env(data_list, envir = .GlobalEnv)
 MouseGene <- MouseToHuman_gene$id
+drivergene_cancer <- driver_list %>% filter(grepl(type, Tissue)) %>% pull(Gene) %>% na.omit()
 
 # Function to load cohort-specific data
 # ---- fst-only readers -------------------------------------------------------
@@ -823,7 +824,7 @@ plot_timing_summary <- function(diff_all, driver_list, clinical_data, type, cell
 }
 
 ## Timeline plot by PyhlogicNDT
-driver_gene <- na.omit(driver_gene)
+drivergene_cancer <- na.omit(drivergene_cancer)
 wrap_hanging <- function(label,
                          width = 24,
                          indent = 4){
@@ -892,7 +893,7 @@ plot_phy <- function(data) {
   gene_levels <- unique(summary_df$Gene)
   
   italic_labels <- ifelse(
-    gene_levels %in% driver_gene,
+    gene_levels %in% drivergene_cancer,
     paste0("<i>", gene_levels, "</i>"),
     gene_levels)
   

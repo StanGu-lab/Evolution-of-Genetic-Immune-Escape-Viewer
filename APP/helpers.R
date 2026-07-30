@@ -14,7 +14,7 @@ libs <- c(
   "broom", "shiny", "ggplot2", "dplyr", "tidyr", "data.table", 
    "stringr", "ggradar", "scales", "gridExtra", "ggsci", "patchwork", 
   "maftools", "ggdist", "ggthemes", "ggrepel", "plotly", "textshape", 
-  "survival", "survminer", "purrr", "shinycssloaders", "grid", "fst"
+  "survival", "survminer", "purrr", "shinycssloaders", "grid", "fst", "cowplot", "ggtext"
 )
 
 # Install missing packages and load them
@@ -96,6 +96,9 @@ MouseGene <- MouseToHuman_gene$id
 read_diff_all_fst     <- function(cohort_path, suffix, columns = NULL)
   .read_fst_parts(cohort_path, "diff_all",     suffix, columns)
 
+read_diff_all_phy_fst <- function(cohort_path, suffix, columns = NULL)
+  .read_fst_parts(cohort_path, "diff_all_phy", suffix, columns)
+
 read_diff_allgene_fst <- function(cohort_path, suffix, columns = NULL)
   .read_fst_parts(cohort_path, "diff_allgene", suffix, columns)
 
@@ -116,6 +119,7 @@ dynamic_cohort_data <- function(cohort) {
   list(
     # fst-only reads; pass `columns = c("col1","col2",...)` if you want even faster loads
     diff_all     = read_diff_all_fst(cohort_path, suffix),
+    diff_all_phy     = read_diff_all_phy_fst(cohort_path, suffix),
     diff_allgene = read_diff_allgene_fst(cohort_path, suffix),
     
     # unchanged bits
@@ -162,6 +166,7 @@ load_escape_data <- function(cohort) {
   
   list(
     diff_all = read_diff_all_fst(cohort_path, suffix),
+    diff_all_phy = read_diff_all_phy_fst(cohort_path, suffix),
     clinical_data = data.table::fread(file.path(cohort_path, paste0("clinical_", suffix, ".csv"))),
     ciber_all = data.table::fread(file.path(cohort_path, paste0("ciber_", suffix, ".csv"))),
     surv_data = data.table::fread(file.path(cohort_path, paste0("survival_", suffix, ".csv"))),
@@ -402,7 +407,7 @@ plot_radar_all <- function(Freq_all, cell_type) {
     
     settings <- scale_settings[[key]]
     
-    suppressMessages(ggradar(wide_data,
+    plot <- suppressMessages(ggradar(wide_data,
             values.radar = settings[1:3],
             grid.min = as.numeric(settings[4]),
             grid.mid = as.numeric(settings[5]),
@@ -434,6 +439,17 @@ plot_radar_all <- function(Freq_all, cell_type) {
         legend.margin = margin(t = 1, b = 1),
         legend.box.spacing = unit(0.1, "cm")
       ))
+    
+    if (cell_type == "GammadeltaTcells" && reg == "pos") {
+      plot <- plot +
+        guides(colour = guide_legend()) +
+        theme(
+          legend.position = "bottom",
+          legend.title = element_blank()
+        )
+    }
+    
+    return(plot)
   }
   
   list(pos = plot_radar(Freq_all, cell_type, "pos", Type_com) +
@@ -512,12 +528,21 @@ color_vector <- setNames(color_palette, timing_bin_levels)
 data_legend <- data.frame(value = c(0, 0.5, 1),
                           group = c("A", "B", "C"))
 
+## Timeline plot by ratio
 plot_timing_summary <- function(diff_all, driver_list, clinical_data, type, cell_type,
                                 cutoff_mut = 0.6, cutoff_pathway = 0.5,
                                 cutoff_ratio = 2, mode = 2, num_filter = 4) {
   
   drivergene_cancer <- driver_list %>% filter(grepl(type, Tissue)) %>% pull(Gene)
   data_driver <- diff_all %>% filter(histology_abbreviation == !!type, pathway %in% drivergene_cancer) %>% filter(!is.na(mean_diff)) 
+  
+  Cohort = unique(clinical_data$Cohort)
+  
+  if (Cohort == "ColoRect-AdenoCA_Prognosis") {
+    num_filter = 29
+  } else {
+    num_filter = 4
+  }
   
   if (length(cell_type > 1)) {
     data_reg <- diff_all %>% filter(histology_abbreviation == !!type, celltype %in% !!cell_type) %>% filter(!is.na(mean_diff))
@@ -552,7 +577,7 @@ plot_timing_summary <- function(diff_all, driver_list, clinical_data, type, cell
     summarise(Sum_determined = n(), .groups = 'drop') %>% 
     ungroup %>% 
     inner_join(data_filter1, ., by = "pathway") %>%
-    filter(Sum_determined > 4)
+    filter(Sum_determined > num_filter)
   
   height = 7
   
@@ -797,8 +822,206 @@ plot_timing_summary <- function(diff_all, driver_list, clinical_data, type, cell
   }
 }
 
+## Timeline plot by PyhlogicNDT
+driver_gene <- na.omit(driver_gene)
+wrap_hanging <- function(label,
+                         width = 24,
+                         indent = 4){
+  
+  ## detect italic labels
+  italic <- grepl("^<i>.*</i>$", label)
+  
+  ## remove HTML tags temporarily
+  txt <- gsub("</?i>", "", label)
+  
+  ## wrap text
+  lines <- str_wrap(txt, width = width) |>
+    strsplit("\n") |>
+    unlist()
+  
+  ## add hanging indent to all but first line
+  if(length(lines) > 1){
+    indent_html <- paste(rep("&nbsp;", indent), collapse = "")
+    lines[-1] <- paste0(indent_html, lines[-1])
+  }
+  
+  txt <- paste(lines, collapse = "<br>")
+  
+  ## restore italics
+  if(italic)
+    txt <- paste0("<i>", txt, "</i>")
+  
+  txt
+}
+
+plot_phy <- function(data) {
+  
+  type = unique(data$histology_abbreviation)
+  
+  summary_df <- data  %>%
+    group_by(event) %>%
+    summarise(
+      median_beta = median(type, na.rm = TRUE),
+      lower95 = quantile(type, 0.025, na.rm = TRUE),
+      upper95 = quantile(type, 0.975, na.rm = TRUE),
+      mean_log_odds = mean(type, na.rm = TRUE),
+      n = n(),
+      .groups = "drop") %>% 
+    mutate(
+      color_group = case_when(
+        lower95 > 0 & upper95 > 0 ~ "Early",
+        lower95 < 0 & upper95 < 0 ~ "Late",
+        TRUE ~ "Undetermined"),
+      Gene = event) %>% 
+    arrange(median_beta)
+  
+  plot_df <- data %>%
+    left_join(
+      summary_df %>%
+        dplyr::select(
+          event,
+          median_beta,
+          lower95,
+          upper95,
+          color_group
+        ),
+      by = "event") %>% 
+    mutate(Estimate = type,
+           Gene = event) 
+  
+  gene_levels <- unique(summary_df$Gene)
+  
+  italic_labels <- ifelse(
+    gene_levels %in% driver_gene,
+    paste0("<i>", gene_levels, "</i>"),
+    gene_levels)
+  
+  italic_labels <- sapply(
+    italic_labels,
+    wrap_hanging,
+    width = 22,
+    indent = 6)
+  
+  plot_df <- plot_df %>%
+    mutate(
+      Gene = as.character(Gene),
+      Gene = factor(Gene, levels = gene_levels),
+      gene_id = as.numeric(Gene))
+  
+  prev_df <- phyloic_all %>%
+    filter(histology_abbreviation == !!type) %>% 
+    distinct(event, .keep_all = T)  %>%
+    mutate(Prevalence = (n_occur / n_samp)*100,
+           event = factor(event, levels = gene_levels)) %>%
+    filter(!is.na(event))
+  
+  type_num <- unique(prev_df$n_samp)
+  sampling = sub("^[^_]*_", "", boot)
+  
+  if (grepl("all", boot)) {
+    title = paste0(type, "\n", "(n = ", type_num, ")")
+  } else if (grepl("50|100|200|150", boot)) {
+    title = paste0(sampling, " Timing Samplings")
+  } else {
+    title = paste0(type, "\n", "(n = ", type_num, ")")
+  }
+  
+  max_value = abs(max(data$type))
+  min_value = abs(min(data$type))
+  y_lim <- round(max(max_value, min_value)) + 0.2
+  y_low = -y_lim
+  y_high = y_lim
+  
+  if (type %in% c("Eso-AdenoCA", "Lymph-BNHL", "Skin-Melanoma")) {
+    y_label_size = 10
+    x_label_size = 10
+    bar_size = 3
+  } else {
+    y_label_size = 12
+    x_label_size = 12
+    bar_size = 3.5
+  }
+  
+  ## violin plot
+  p_violin <- ggplot(plot_df, aes(x = Gene, y = Estimate)) +
+    geom_violin(
+      scale = "width",
+      trim = TRUE,
+      alpha = 0.7,
+      width = 0.6,      
+      fill = "#2e7d64",   
+      color = NA)  +
+    geom_boxplot(
+      width = 0.1,
+      outlier.shape = NA,
+      #color = "black",
+      alpha = 0.6) +
+    theme_cowplot() +
+    coord_flip(ylim = c(y_high, y_low)) +
+    scale_y_reverse() + 
+    scale_x_discrete(labels = setNames(italic_labels, gene_levels)) + 
+    scale_fill_manual(values = color_bin) +
+    ylab("relative log odds timing") +
+    xlab(NULL) +
+    ggtitle(title) +
+    theme(
+      axis.text.x = element_text(size = x_label_size, color = "black", hjust = 0.5),
+      axis.text.y = element_markdown(size = y_label_size, color = "black", hjust = 1, halign = 1),
+      axis.title.x = element_text(size = 12),
+      plot.title = element_text(size = 16, hjust = 0.5, face = "plain"),
+      axis.line = element_line(color = "black"),
+      axis.ticks = element_line(color = "black"),
+      axis.title.y = element_blank(),
+      axis.ticks.y = element_line(color = "black"),
+      axis.line.y = element_blank(),
+      axis.line.x = element_blank(),
+      panel.border = element_rect(
+        colour = "black",
+        fill = NA,
+        linewidth = 0.7
+      ),
+      legend.position = "none",
+      plot.margin = margin(t = 10, b = 10, l = 10, r = 0)
+    )
+  
+  p_bars <- ggplot(
+    prev_df,
+    aes(y = event, x = Prevalence)) +
+    geom_col(
+      width = 0.6,
+      fill = "#2e7d64",
+      alpha = 0.7,
+    ) +
+    geom_text(
+      aes(label = paste0(round(Prevalence), "%")),
+      hjust = -0.1,
+      size = 3.5
+    ) +
+    coord_cartesian(clip = "off") +
+    scale_x_continuous(
+      expand = expansion(mult = c(0, 0.15))
+    ) +
+    theme_cowplot() +
+    theme(
+      axis.title = element_blank(),
+      axis.text.x= element_blank(),
+      axis.ticks.x = element_blank(),
+      axis.line.x = element_blank(),
+      axis.line.y = element_blank(),
+      axis.text.y = element_blank(),
+      axis.ticks.y = element_blank(),
+      panel.grid = element_blank(),
+      plot.margin = margin(t = 5, r = 25, b = 5, l = 5)
+    )
+  
+  plot_combined <- p_violin + p_bars + plot_layout(widths = c(8, 2))
+  return(plot_combined)
+}
+
+
 ## Timing plot for genes
 plot_timing_bar_by_genes <- function(selected_genes, diff_data, type_list, column_names, timing_bin_levels, color_vector, legend) {
+
   df_Reg <- diff_data %>%
     filter(Hugo_Symbol %in% selected_genes) %>%
     group_by(sample_id) %>%
@@ -828,7 +1051,7 @@ plot_timing_bar_by_genes <- function(selected_genes, diff_data, type_list, colum
       timing_bin = cut(late_ratio, breaks = range_breaks, include.lowest = TRUE)
     ) %>%
     arrange(desc(count)) %>%
-    filter(count > 4)
+    filter(count > n_count)
   
   data_filter <- data_filter1 %>%
     filter(timing_cat != "Undetermined") %>%
@@ -1192,7 +1415,6 @@ plot_forest_gg <- function(df, candidate_genes, min_clip = 0.1, max_clip = 10) {
       plot.margin = margin(5, 5, 5, 5)
     )
 }
-
 
 ## Plot Timing Density
 plot_raincloud <- function(data, x = "histology_abbreviation", y = "mean_diff", mode = "mean", title, width = 4, height = 5) {

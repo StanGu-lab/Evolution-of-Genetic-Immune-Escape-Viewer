@@ -562,7 +562,7 @@ plot_timing_summary <- function(diff_all, driver_list, clinical_data, type, cell
   pathway_list <- data_all %>% distinct(pathway, regulator, .keep_all = F)
   
   data_filter1 <- data_all %>% group_by(pathway, histology_abbreviation) %>%
-    summarise(count = n(), .groups = 'drop') %>%
+    dplyr::summarise(count = n(), .groups = 'drop') %>%
     ungroup() %>%
     inner_join(., data_all, by = c("histology_abbreviation", "pathway")) %>%
     mutate(n_base = 1,
@@ -824,7 +824,6 @@ plot_timing_summary <- function(diff_all, driver_list, clinical_data, type, cell
 }
 
 ## Timeline plot by PyhlogicNDT
-drivergene_cancer <- na.omit(drivergene_cancer)
 wrap_hanging <- function(label,
                          width = 24,
                          indent = 4){
@@ -917,15 +916,15 @@ plot_phy <- function(data) {
     filter(!is.na(event))
   
   type_num <- unique(prev_df$n_samp)
-  sampling = sub("^[^_]*_", "", boot)
+  #sampling = sub("^[^_]*_", "", boot)
   
-  if (grepl("all", boot)) {
+  #if (grepl("all", boot)) {
     title = paste0(type, "\n", "(n = ", type_num, ")")
-  } else if (grepl("50|100|200|150", boot)) {
-    title = paste0(sampling, " Timing Samplings")
-  } else {
-    title = paste0(type, "\n", "(n = ", type_num, ")")
-  }
+  #} else if (grepl("50|100|200|150", boot)) {
+  #  title = paste0(sampling, " Timing Samplings")
+  #} else {
+  #  title = paste0(type, "\n", "(n = ", type_num, ")")
+  #}
   
   max_value = abs(max(data$type))
   min_value = abs(min(data$type))
@@ -1022,7 +1021,9 @@ plot_phy <- function(data) {
 
 ## Timing plot for genes
 plot_timing_bar_by_genes <- function(selected_genes, diff_data, type_list, column_names, timing_bin_levels, color_vector, legend) {
-
+  
+  n_count = 4
+  
   df_Reg <- diff_data %>%
     filter(Hugo_Symbol %in% selected_genes) %>%
     group_by(sample_id) %>%
@@ -1044,7 +1045,7 @@ plot_timing_bar_by_genes <- function(selected_genes, diff_data, type_list, colum
   
   data_filter1 <- df_Reg %>%
     group_by(pathway, histology_abbreviation) %>%
-    summarise(count = n(), .groups = "drop") %>%
+    dplyr::summarise(count = n(), .groups = "drop") %>%
     inner_join(df_Reg, by = c("histology_abbreviation", "pathway")) %>%
     mutate(
       n_base = 1,
@@ -1127,7 +1128,7 @@ plot_timing_bar_by_genes <- function(selected_genes, diff_data, type_list, colum
       inner_join(type_list, by = "sample_id")
     
     data_filter1 <- df_Reg %>% group_by(pathway, histology_abbreviation) %>%
-      summarise(count = n(), .groups = 'drop') %>%
+      dplyr::summarise(count = n(), .groups = 'drop') %>%
       ungroup() %>%
       inner_join(., df_Reg, by = c("histology_abbreviation", "pathway")) %>%
       mutate(n_base = 1,
@@ -1137,7 +1138,7 @@ plot_timing_bar_by_genes <- function(selected_genes, diff_data, type_list, colum
              ratio_plot = (n_late + n_undetermined/2) / 250,
              timing_bin = cut(ratio_plot, breaks = range_breaks, include.lowest = TRUE)) %>% 
       arrange(desc(count)) %>%
-      filter(count > 4)
+      filter(count > n_count)
     
     data_filter <- data_filter1 %>% filter(timing_cat != "Undetermined") %>%
       group_by(histology_abbreviation) %>%

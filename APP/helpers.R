@@ -909,7 +909,7 @@ plot_phy <- function(data) {
       Gene = factor(Gene, levels = gene_levels),
       gene_id = as.numeric(Gene))
   
-  prev_df <- phyloic_all %>%
+  prev_df <- plot_df %>%
     filter(histology_abbreviation == !!type) %>% 
     distinct(event, .keep_all = T)  %>%
     mutate(Prevalence = (n_occur / n_samp)*100,

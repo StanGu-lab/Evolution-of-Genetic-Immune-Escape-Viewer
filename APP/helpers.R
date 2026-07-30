@@ -66,7 +66,7 @@ load_data_files <- function() {
 data_list <- load_data_files()
 list2env(data_list, envir = .GlobalEnv)
 MouseGene <- MouseToHuman_gene$id
-drivergene_cancer <- driver_list %>% filter(grepl(type, Tissue)) %>% pull(Gene) %>% na.omit()
+drivergene_cancer <- driver_list %>% pull(Gene) %>% na.omit()
 
 # Function to load cohort-specific data
 # ---- fst-only readers -------------------------------------------------------

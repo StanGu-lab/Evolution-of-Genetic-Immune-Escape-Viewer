@@ -147,7 +147,7 @@ module load python/3.10.5-gdc
 
 cd ${path_home}/oncokb-annotator
 
-TOKEN="0bc84c4d-0e1a-4ab9-a2d8-ede108b97579" #OncoKB API Token
+TOKEN="" #OncoKB API Token
 
 IMAF="/Users/wchen20/Desktop/PCAWG/consensus_snv_indel/non_syn/mutation_impact/fd163b56-1c2d-4e63-9fad-ba3221ae274b.consensus.20160830.filtered.somatic.snv_mnv_am.maf"
 OMAF="test/ffe4bb51-e98a-41a7-a4e1-c3970386889c.oncokb.txt"

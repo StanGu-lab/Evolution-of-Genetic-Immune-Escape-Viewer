@@ -1471,7 +1471,7 @@ server <- function(input, output, session) {
   
   # Pathway Timing -- make the density plot for distribution of mean mutation timing for the selected gene list
   output$timing_plot_gene <- renderPlot({
-    tryCatch({
+    #tryCatch({
       req(cohort_data(), get_selected_genes(), input$histology_type_genelist)
       
       selected_genes <- get_selected_genes()
@@ -1507,7 +1507,7 @@ server <- function(input, output, session) {
             timing_bin = cut(ratio_plot, breaks = range_breaks, include.lowest = TRUE),
             timing_bin = factor(timing_bin, levels = names(color_vector))
           ) %>%
-          count(timing_bin)
+          dplyr::count(timing_bin)
         
         if (nrow(data_filter1) < 5) {
           # No data case
@@ -1535,12 +1535,12 @@ server <- function(input, output, session) {
       
       req(p)
       p
-    }, error = function(e) {
-      ggplot() + theme_void() +
-        annotate("text", x = 0.5, y = 0.5,
-                 label = "Insufficient data",
-                 size = 14, hjust = 0.5)
-    })
+    #}, error = function(e) {
+    #  ggplot() + theme_void() +
+    #    annotate("text", x = 0.5, y = 0.5,
+    #             label = "Insufficient data",
+    #             size = 14, hjust = 0.5)
+    #})
   })
   
   # Survival -- make survival plot by mutation timing for the selected gene list

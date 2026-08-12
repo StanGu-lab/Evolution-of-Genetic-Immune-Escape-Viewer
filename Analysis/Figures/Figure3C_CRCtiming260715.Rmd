@@ -35,45 +35,11 @@ library("cowplot")
 library("ggsci")
 
 ## Path
-PCAWG_path <- "/Users/wchen20/Desktop/PCAWG"
-gritic_path <- paste0(PCAWG_path, "/MHC_evolution/GRITIC/output")
+PCAWG_path <- "~/Desktop/PCAWG"
 
-source("/Users/wchen20/Desktop/PCAWG/code/source/basic.R")
-source("/Users/wchen20/Desktop/PCAWG/code/source/insert_newlines.R")
-source("/Users/wchen20/Desktop/PCAWG/code/source/plot_segTiming.R")
-
-## Timing of segment gain
-seg <- fread(paste0(PCAWG_path, "/MHC_evolution/GRITIC/output/SNV_timing/wenjie_posterior_pcawg.tsv"))
-
-## Timing of WGD
-wgd_median <- fread("/Users/wchen20/Desktop/PCAWG/MHC_evolution/GRITIC/output/wgd_median.csv") %>% dplyr::select(wgd_mediantiming, sample_id)
-
-## Timing of non-synonymous mutations
-nonsyn_filter_nonPloy <- fread("/Users/wchen20/Desktop/PCAWG/MHC_evolution/GRITIC/output/filter/griticnon_filterclonal.tsv") %>%
-  dplyr::select(-matches("\\.y$"), -Sample) %>%
-  rename_with(~ str_replace_all(., "\\.x$", "")) %>% 
-  filter(sample_id %in% sample_MSS)
-
-sample_sucess <- unique(nonsyn_filter_nonPloy$sample_id)
-```
-
-# Source
-```{r}
-
-
-```
-
-# Source
-```{r}
-# *log_odds.tsv: /Users/wchen20/Desktop/2026-02-16_Draft/code/Revision/workflow/4_5_GRITIC_CRCdriver.Rmd
-```
-
-# Set Path
-```{r}
-path_figure <- "/Users/wchen20/Desktop/2026-02-16_Draft/Revision_Figures/Original_output/"
-path_figure <- "/Users/wchen20/Desktop/2026-02-16_Draft/Revision_Figures/Original_output/check/"
-
-path_MutationTiming <- "/Users/wchen20/Desktop/2026-02-16_Draft/Final_Results/8_MutationTiming/"
+source("~/Desktop/PCAWG/code/source/basic.R")
+source("~/Desktop/PCAWG/code/source/insert_newlines.R")
+source("~/Desktop/PCAWG/code/source/plot_segTiming.R")
 ```
 
 ## Figure 3C

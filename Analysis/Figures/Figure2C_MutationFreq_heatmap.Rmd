@@ -35,34 +35,18 @@ suppressMessages(library("ggsci"))
 suppressMessages(library("cowplot"))
 suppressMessages(library("ggdist"))
 
-PCAWG_path <- "/Users/wchen20/Desktop/PCAWG/"
+PCAWG_path <- "~/Desktop/PCAWG/"
 gritic_path <- paste0(PCAWG_path, "/MHC_evolution/GRITIC/output")
 
-source("/Users/wchen20/Desktop/PCAWG/code/source/basic.R")
-source("/Users/wchen20/Desktop/PCAWG/code/source/EnrichedView_modified.R")
-source("/Users/wchen20/Desktop/PCAWG/code/source/insert_newlines.R")
-source("/Users/wchen20/Desktop/PCAWG/code/source/CRP_MAGEMSig0409.R")
-
-path_figure <- "/Users/wchen20/Desktop/2026-02-16_Draft/Revision_Figures/Original_output/Figures/Figure2/"
-date = "260406"
-```
-
-# 1. Combine all
-```{r}
-cell_types <- c("Tcells", "MHCregulators", "NKcells", "Macrophages", "GammadeltaTcells")
-regulators <- c("neg", "pos")
-
-CRISPR_path <- paste0("/Users/wchen20/Desktop/2026-02-16_Draft/Revision/R1Major2/005/Summary/MutationsFreq/260406/")
-file_path <- list.files(CRISPR_path, pattern = "_Freq_oncoMSS.csv", full.names = TRUE, recursive = TRUE)
-file_path <- grep(date, file_path, value = TRUE)
-
-Freq_all <- lapply(file_path, fread) %>% rbindlist()
-write.csv(Freq_all, file = "/Users/wchen20/Desktop/2026-02-16_Draft/Revision/R1Major2/005/Summary/MutationsFreq/260406/oncoMSS_PCAWG.csv", row.names = F)
+source("~/Desktop/PCAWG/code/source/basic.R")
+source("~/Desktop/PCAWG/code/source/EnrichedView_modified.R")
+source("~/Desktop/PCAWG/code/source/insert_newlines.R")
+source("~/Desktop/PCAWG/code/source/CRP_MAGEMSig0409.R")
 ```
 
 # 2. Figure 2C -- Heatmap
 ```{r}
-df <- fread("/Users/wchen20/Desktop/2026-02-16_Draft/Revision/R1Major2/005/Summary/MutationsFreq/260406/oncoMSS_PCAWG.csv") %>% 
+df <- fread(paste0(path_MutationFreq, "/oncoMSS_PCAWG.csv")) %>% 
   mutate(pathway_new = gsub("\n", "", pathway_new)) %>% 
   mutate(pathway_new = case_when(pathway_new == "Antigen Presentation via MHC-I" & cell_type == "MHCregulators" ~ paste0(pathway_new, " (MHC-I) "),
                                  pathway_new == "Antigen Presentation via MHC-I" & cell_type == "Tcells" ~ paste0(pathway_new, " (Tcells) "),

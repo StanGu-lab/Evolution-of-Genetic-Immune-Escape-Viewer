@@ -1,0 +1,86 @@
+---
+title: "0_SetWorkingPath"
+author: "AJ"
+date: "2026-08-12"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# 0. Library packages
+```{r}
+rm(list = ls())
+
+library("stringr")
+library("dplyr")
+library("patchwork")
+library("ggpubr")
+library("ggridges")
+library("truncnorm")
+library("tidyr")
+library("scatterpie")
+library("tidyselect")
+library("pillar")
+library("data.table")
+library("readr")
+library("ggplot2")
+library("openxlsx")
+library("ggrepel")
+library("tibble")
+library("textshape")
+library("matrixStats")
+library("GenomicRanges")
+library("broom")
+```
+
+# Set path
+```{r}
+path_data <- "~/EvoGIEdata/"
+path_figure <- "~/EvoGIEdata/Figure/"
+
+path_HLAmutations <- paste0(path_data, "/1_APM/1_HLAmutations/")
+path_HLALOH <- paste0(path_data, "/1_APM/2_HLALOH/")
+path_HomoDeletion <- paste0(path_data, "/1_APM/3_HomozygousDeletion/")
+path_APMall <- paste0(path_data, "/1_APM/4_APMall/")
+path_ciber <-  paste0(path_data, "/3_Cibersort/")
+path_dNdScvAPM <- paste0(path_data, "/4_dNdS_APM/")
+path_CRISPR <-  paste0(path_data, "/5_CRISPR/")
+path_RRA = paste0(path_data, "/5_CRISPR/RRA/")
+path_TopHits = paste0(path_data, "/5_CRISPR/TopHits/")
+path_RRA_leaveout <-  paste0(path_data, "/5_CRISPR/Leaveoneout/")
+path_CRISPRsum <-  paste0(path_data, "/5_CRISPR/Summary/")
+path_MutationFreq <- paste0(path_data, "/6_MutationFreq/")
+path_dNdScv <- paste0(path_data, "/7_dNdS_Pathway/")
+path_MutationTiming <- paste0(path_data, "/8_MutationTiming/")
+path_Phy = paste0(path_MutationTiming, "/timeline/nocnv/")
+path_Phy_loh = paste0(path_MutationTiming, "/timeline/wgd_hlaloh/")
+path_mutImpact = paste0(path_data, "/6_MutationFreq/mutation_impact/")
+path_oncoKB = paste0(path_data, "/6_MutationFreq/mutation_impact/oncoKB/")
+path_gritic = paste0(path_MutationTiming, "/min_drivermutation_250/")
+
+paths <- c(
+  path_HLAmutations,
+  path_HLALOH,
+  path_HomoDeletion,
+  path_APMall,
+  path_ciber,
+  path_dNdScvAPM,
+  path_CRISPR,
+  path_TopHits,
+  path_RRA,
+  path_RRA_leaveout,
+  path_CRISPRsum,
+  path_MutationFreq,
+  path_mutImpact,
+  path_oncoKB,
+  path_dNdScv,
+  path_gritic,
+  path_MutationTiming,
+  path_Phy,
+  path_Phy_loh
+)
+
+invisible(lapply(paths, dir.create, recursive = TRUE, showWarnings = FALSE))
+```

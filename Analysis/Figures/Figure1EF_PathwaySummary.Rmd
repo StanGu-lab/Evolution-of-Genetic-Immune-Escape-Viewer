@@ -51,12 +51,6 @@ LOH_MSStcga <- LOH_MSI %>% filter(proj == "tcga")
 sample_MSS <- LOH_MSS  %>% pull(aliquot_id)
 ```
 
-# Set path
-```{r}
-path_figure <- "/Users/wchen20/Desktop/2026-02-16_Draft/Revision_Figures/Original_output/"
-path_RRA = "/Users/wchen20/Desktop/2026-02-16_Draft/Final_Results/5_CRISPR/RRA/"
-```
-
 # Figure 1EF
 ```{r}
 rename_list <- fread("/Users/wchen20/Desktop/PCAWG/CRISPR/CRISPRscreen20240118/rename_list.csv")
@@ -146,10 +140,4 @@ for (cell_type in  c("MHCregulators", "Tcells", "NKcells", "Macrophages", "Gamma
 
 ggsave(filename = paste0(path_figure, "/Figure1E_pathwayRRA.pdf"), plot = plot_enrich[[1]], width = 10, height = 5, units = "in")
 ggsave(filename = paste0(path_figure, "/Figure1F_pathwayRRA.pdf"), plot = plot_enrich[[2]], width = 10, height = 5, units = "in")
-```
-
-## SFigure 9
-```{r}
-plot_enrich_other <- plot_enrich[[3]]/plot_enrich[[4]]/plot_enrich[[5]]
-ggsave(filename = paste0(path_figure, "/SFigure9_pathwayRRA_other.pdf"), plot = plot_enrich_other, width = 10, height = 10, units = "in")
 ```

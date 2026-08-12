@@ -1,0 +1,199 @@
+---
+title: "Figure2B"
+author: "AJ"
+date: "2025-08-07"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# 0. Libray packages
+```{r}
+rm(list = ls())
+
+suppressMessages(library("ggplot2"))
+suppressMessages(library("patchwork"))
+suppressMessages(library("ggpubr"))
+suppressMessages(library("maftools"))
+suppressMessages(library("survival"))
+suppressMessages(library("survminer"))
+suppressMessages(library("tidyr"))
+suppressMessages(library("broom"))
+suppressMessages(library("data.table"))
+suppressMessages(library("dplyr"))
+suppressMessages(library("ggh4x"))
+suppressMessages(library("forcats"))
+suppressMessages(library("textshape"))
+suppressMessages(library("matrixStats"))
+suppressMessages(library("ggrepel"))
+suppressMessages(library("tibble"))
+suppressMessages(library("readr"))
+suppressMessages(library("ggradar"))
+suppressMessages(library("ggsci"))
+suppressMessages(library("cowplot"))
+suppressMessages(library("ggdist"))
+
+PCAWG_path <- "/Users/wchen20/Desktop/PCAWG/"
+gritic_path <- paste0(PCAWG_path, "/MHC_evolution/GRITIC/output")
+path_figure <- "/Users/wchen20/Desktop/PCAWG/Figures/20241203/"
+path_figure <- "/Users/wchen20/Desktop/PCAWG/Figures/20241231/"
+
+source("/Users/wchen20/Desktop/PCAWG/code/source/basic.R")
+source("/Users/wchen20/Desktop/PCAWG/code/source/EnrichedView_modified.R")
+source("/Users/wchen20/Desktop/PCAWG/code/source/insert_newlines.R")
+source("/Users/wchen20/Desktop/PCAWG/code/source/CRP_MAGEMSig0409.R")
+```
+
+# Source
+```{r}
+# *_Freq_oncoMSS.csv: /Users/wchen20/Desktop/2026-02-16_Draft/code/Revision/workflow/3_1_CRISPR_MutationFreq.Rmd
+```
+
+# Set Path
+```{r}
+path_figure <- "/Users/wchen20/Desktop/2026-02-16_Draft/Revision_Figures/Original_output/"
+path_figure <- "/Users/wchen20/Desktop/2026-02-16_Draft/Revision_Figures/Original_output/check/"
+
+path_MutationFreq <- "/Users/wchen20/Desktop/2026-02-16_Draft/Final_Results/6_MutationFreq/"
+```
+
+# Figure 2B -- results generated from /Users/wchen20/Desktop/2026-02-16_Draft/code/Revision/workflow/3_2_3_CRISPR_MutationFreq.Rmd
+```{r}
+rename_list <- fread("/Users/wchen20/Desktop/PCAWG/CRISPR/CRISPRscreen20240118/rename_list.csv")
+
+cell_types <- c("Tcells", "MHCregulators", "NKcells", "Macrophages", "GammadeltaTcells")
+regulators <- c("neg", "pos")
+plot_radar <- list()
+LOH_MSScols <- LOH_MSS %>% dplyr::select(aliquot_id, MSI_mut, histology_abbreviation)
+
+for (cell_type in cell_types) {
+  mut_path = path_MutationFreq
+  Freq_all <- fread(paste0(mut_path, cell_type, "_Freq_oncoMSS.csv"))
+  Freq_pos <- Freq_all %>%
+  filter(cell_type == !!cell_type,
+         regulator == "pos",
+         Freq_mut > 5) %>%
+  group_by(pathway_new) %>%
+  slice_max(order_by = percent_mut, n = 10, with_ties = FALSE) %>%
+  ungroup() %>% 
+  mutate(histology_abbreviation = as.character(histology_abbreviation)) %>% 
+  pull(histology_abbreviation) %>% 
+  unique()
+  
+  Freq_neg <- Freq_all %>%
+    filter(cell_type == !!cell_type, 
+           regulator == "neg", 
+           Freq_mut > 5) %>%
+  group_by(pathway_new) %>%
+  slice_max(order_by = percent_mut, n = 10, with_ties = FALSE) %>%
+  ungroup() %>% 
+  mutate(histology_abbreviation = as.character(histology_abbreviation)) %>% 
+    pull(histology_abbreviation) %>% 
+    unique()
+  
+  if (cell_type %in% c("Tcells")) {
+    
+    Type_com <- c(Freq_pos, Freq_neg) %>% unique(.)
+    
+  } else if (cell_type %in% c("NKcells", "Macrophages", "GammadeltaTcells", "MHCregulators")) {
+  
+    Type_com <- c(Freq_pos, Freq_neg) %>% unique(.)
+    
+  }
+  
+  for (reg in regulators) {
+    
+    Freq_sub <- Freq_all %>%
+      filter(cell_type == !!cell_type, regulator == !!reg) %>% 
+      filter(histology_abbreviation %in% !!Type_com)
+    
+    data <- Freq_sub %>%
+      mutate(pathway = pathway_new) %>%
+      dplyr::select(-cell_type, -regulator, -Sum, -Freq_mut, -pathway_new, -percent_whole)
+    
+    wide_data <- data %>%
+      spread(key = histology_abbreviation, value = percent_mut) %>% 
+      mutate(across(everything(), ~replace_na(.x, 0))) 
+    
+    if (cell_type == "MHCregulators" & reg == "pos") {
+      values_radar = c("0%", "20%", "30%")
+      grid_mid = 0.2
+      grid_max = 0.3
+    } else if (cell_type == "MHCregulators" & reg == "neg") {
+      values_radar = c("0%", "20%", "30%")
+      grid_mid = 0.3
+      grid_max = 0.6
+    } else if (cell_type == "Tcells" & reg == "pos") {
+      values_radar = c("0%", "15%", "30%")
+      grid_mid = 0.15 
+      grid_max = 0.30
+    } else if (cell_type == "Tcells" & reg == "neg") {
+      values_radar = c("0%", "30%", "55%")
+      grid_mid = 0.30
+      grid_max = 0.60
+    } else if (cell_type == "NKcells") {
+      values_radar = c("0%", "10%", "20%")
+      grid_mid = 0.10
+      grid_max = 0.20
+    } else if (cell_type == "GammadeltaTcells" & reg == "pos") {
+      values_radar = c("0%", "5%", "15%")
+      grid_mid = 0.05
+      grid_max = 0.15
+    } else if (cell_type == "GammadeltaTcells" & reg == "neg") {
+      values_radar = c("0%", "15%", "25%")
+      grid_mid = 0.15
+      grid_max = 0.25
+    } else if (cell_type == "Macrophages" & reg == "pos") {
+      values.radar = c("0%", "25%", "50%")
+      grid_mid = 0.25  
+      grid_max = 0.50
+    } else if (cell_type == "Macrophages" & reg == "neg") {
+      values_radar = c("0%", "10%", "20%")
+      grid_mid = 0.10  
+      grid_max = 0.20
+    }
+ 
+     plot_radar[[paste0(cell_type, "_", reg)]] <- ggradar(wide_data,
+                                                           values.radar = values_radar,
+                                                           grid.min = 0,
+                                                           grid.mid = grid_mid,  
+                                                           grid.max = grid_max, 
+                                                           base.size = 25,
+                                                           grid.line.width = 0.3,
+                                                           grid.label.size = 8,
+                                                           group.line.width = 1.2,
+                                                           group.point.size = 3,
+                                                           axis.label.size = 6.5,
+                                                           axis.label.offset = 1,
+                                                           plot.extent.x.sf = 1.3,
+                                                           legend.position = "right",
+                                                           background.circle.colour = "white",
+                                                           gridline.min.colour = "black",
+                                                           gridline.mid.colour = "black",
+                                                           gridline.max.colour = "black") +
+        theme(plot.margin = margin(t = 5, b = 5, l = 5, r = 30),
+              legend.text = element_text(size = 16)) +
+        guides(color = guide_legend(ncol = 1, bycol = TRUE),
+               legend.justification = c(0, 1)) +
+        scale_color_npg()
+      ggsave(filename = paste0(mut_path, "/Freq_radar", cell_type, reg, ".pdf"), plot = plot_radar[[paste0(cell_type, "_", reg)]], width = 14, height = 10, units = "in")
+      
+    }
+  }
+
+for (cell_type in cell_types) {
+  
+  Freq_radar <- plot_radar[[paste0(cell_type, "_", "pos")]] + plot_radar[[paste0(cell_type, "_", "neg") ]] 
+  ggsave(filename = paste0(path_figure, "/", "Freq_radar", cell_type, ".pdf"), plot = Freq_radar, width = 28, height = 9, units = "in")
+  
+}
+
+for (cell_type in cell_types) {
+  
+  Freq_radar <- plot_radar[[paste0(cell_type, "_", "pos")]] / plot_radar[[paste0(cell_type, "_", "neg") ]] 
+  ggsave(filename = paste0(path_figure, "/", "Freq_radar", cell_type, ".pdf"), plot = Freq_radar, width = 15, height = 18, units = "in")
+  
+}
+```

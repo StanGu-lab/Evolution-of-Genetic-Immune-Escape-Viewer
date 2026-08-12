@@ -46,55 +46,30 @@ ciber_cols <- c("B cells naive", "B cells memory", "Plasma cells", "T cells CD8"
                 "Neutrophils")
 
 cibercom_cols <- c("T_cells_CD8", "T_cells_CD4", "B_cells", "NK_cells", "Macrophage", "Dendritic_cells", "Mast_cells", "Neutrophils", "Eosinophils")
-
-# Genome length: 3000 (GIE paper)
-path_data <- "/Users/wchen20/Desktop/2026-02-16_Draft/Revision/R2Major9/"
-path_save = "/Users/wchen20/Desktop/2026-02-16_Draft/Revision/R2Minor1/"
-```
-
-# Set path
-```{r}
-path_figure <- "/Users/wchen20/Desktop/2026-02-16_Draft/Revision_Figures/Original_output/"
-
-path_HLAmutations <- "/Users/wchen20/Desktop/2026-02-16_Draft/Final_Results/1_APM/1_HLAmutations/"
-path_HLALOH <- "/Users/wchen20/Desktop/2026-02-16_Draft/Final_Results/1_APM/2_HLALOH/"
-path_HomoDeletion <- "/Users/wchen20/Desktop/2026-02-16_Draft/Final_Results/1_APM/3_HomozygousDeletion/"
-path_TMB <- "/Users/wchen20/Desktop/2026-02-16_Draft/Final_Results/2_TMB/"
-path_APMall <- "/Users/wchen20/Desktop/2026-02-16_Draft/Final_Results/1_APM/4_APMall/"
-path_ciber <- "/Users/wchen20/Desktop/2026-02-16_Draft/Final_Results/3_Cibersort/"
 ```
 
 # 1. Figure 1b
 ## TMB
 ```{r pressure, echo=FALSE}
-HLALOH_pcawg <- fread(paste0(path_APMall, "LOH_MSI_final_B.csv")) %>% 
-  subset(MSI_mut == "MSS") %>% 
-  mutate(#APM_Event = ifelse(!is.na(APM_Event), "APM-Mutant", "APM-WT"),
-         APM_Event = factor(APM_Event, levels = c("APM-WT", "APM-Mutant"))) 
-table(HLALOH_pcawg$APM_Event)
+TMB_cbio <- fread(paste0(path_APMall, "LOH_MSI_final_TMB_CNA.csv")) %>% 
+  mutate(cibio_perMB = total_perMB,
+         cibio_perMB_log = log10(total_perMB))
 
-TMB_cbio <- fread(paste0(path_TMB, "/pcawg_HLAupdateMSS_TMB.csv")) %>% 
-  mutate(cibio_perMB = mutation_perMB,
-         cibio_perMB_log = log10(mutation_perMB))
-
-LOH_MSIpcawg <- HLALOH_pcawg %>%
-  filter(MSI_mut == "MSS") %>%
+LOH_MSIpcawg <- TMB_cbio %>%
+  #filter(MSI_mut == "MSS") %>%
   group_by(histology_abbreviation) %>%
   mutate(distinct_count = n_distinct(APM_Event)) %>%
   filter(distinct_count > 1) %>%
-  ungroup() %>%
-  inner_join(., TMB_cbio, by = "aliquot_id") 
+  ungroup() 
 
 pvals <- LOH_MSIpcawg %>%
   group_by(histology_abbreviation) %>%
   summarise(
     p = wilcox.test(cibio_perMB_log ~ APM_Event)$p.value,
-    .groups = "drop"
-  ) %>%
+    .groups = "drop") %>%
   mutate(
     p_adj = p.adjust(p),
-    label = paste0("FDR = ", signif(p_adj, 2))
-  )
+    label = paste0("FDR = ", signif(p_adj, 2)))
 
 select_type <- filter(pvals, p_adj < 0.05) %>% pull(histology_abbreviation) 
 
@@ -124,34 +99,27 @@ plot_TMB <- ggplot(df_LOH_MSIpcawg, aes(x = histology_abbreviation, y = cibio_pe
                      labels = c(0.1, 1, 10, 100, 1000, 10000)) + 
   labs(x = "", y = "TMB", fill = "APM Events") +
   ggtitle("") + 
-  stat_compare_means(aes(group = APM_event), method = "wilcox.test", label = "p.signif", size = 7) # Manually modify the significant stars
+  stat_compare_means(aes(group = APM_Event), method = "wilcox.test", label = "p.signif", size = 7) # Manually modify the significant stars
 
-ggsave(filename = paste0(path_figure, "/Figure1b.pdf"), plot = plot_TMB, width = 6, height = 4.5, units = "in")
+ggsave(filename = paste0(path_figure, "/Figure1B.pdf"), plot = plot_TMB, width = 6, height = 4.5, units = "in")
 ```
 
 # Figure 1c -- Cibersort
 ## Linear regression for Cibersort
 ```{r}
-## TMB
-TMB_cbio <- fread(paste0(path_TMB, "/pcawg_HLAupdateMSS_TMB.csv")) %>% 
-  mutate(cibio_perMB = mutation_perMB,
-         cibio_perMB_log = log10(mutation_perMB))
-
-## APM group
-HLALOH_pcawg <- fread(paste0(path_APMall, "LOH_MSI_final_B.csv")) %>% 
-  subset(MSI_mut == "MSS") %>% 
-  inner_join(., TMB_cbio, by = "aliquot_id") %>% 
-  mutate(#APM_Event = ifelse(!is.na(APM_Event), "APM-Mutant", "APM-WT"),
-         APM_Event = factor(APM_Event, levels = c("APM-WT", "APM-Mutant"))) %>% 
-  dplyr::select("submitted_specimen_id", "histology_abbreviation", "APM_Event", "purity", "ploidy", "wgd_status", "cibio_perMB")
-table(HLALOH_pcawg$APM_Event)
-
 ciber_all <- fread(paste0(path_ciber, "/ciber_all.csv"))
+
+HLALOH_pcawg <- fread(paste0(path_APMall, "LOH_MSI_final_TMB_CNA.csv")) %>% 
+  #subset(MSI_mut == "MSS") %>% 
+  mutate(#APM_Event = ifelse(!is.na(APM_Event), "APM-Mutant", "APM-WT"),
+         APM_Event = factor(APM_Event, levels = c("APM-WT", "APM-Mutant"))) 
+table(HLALOH_pcawg$APM_Event)
+table(HLALOH_pcawg$wgd_status)
 
 filtered_data <- ciber_all %>% 
   dplyr::select(-APM_Event) %>%
   inner_join(HLALOH_pcawg, by = c("submitted_specimen_id", "histology_abbreviation")) %>%
-   mutate(T_cells_CD8 = `T cells CD8`,
+  mutate(T_cells_CD8 = `T cells CD8`,
          T_cells_CD4 = `T cells CD4 naive`+`T cells CD4 memory resting`+`T cells CD4 memory activated`, 
          B_cells = `B cells naive` + `B cells memory`,
          NK_cells = `NK cells resting`+`NK cells activated`,
@@ -160,8 +128,8 @@ filtered_data <- ciber_all %>%
          Mast_cells = `Mast cells resting` + `Mast cells activated`,
          Neutrophils = Neutrophils,
          Eosinophils = Eosinophils) %>%
-  dplyr::select("histology_abbreviation", "APM_Event", all_of(cibercom_cols), "purity", "ploidy", "wgd_status", "cibio_perMB") %>%
-      pivot_longer(cols = all_of(cibercom_cols), 
+  dplyr::select("histology_abbreviation", "APM_Event", all_of(cibercom_cols), "purity", "ploidy", "wgd_status", "total_perMB", "cna_burden") %>%
+  pivot_longer(cols = all_of(cibercom_cols), 
                names_to = "cell_type", values_to = "value") %>%
   group_by(histology_abbreviation, cell_type) %>%
   filter(length(unique(APM_Event)) == 2)  
@@ -181,10 +149,11 @@ lm_res <- filtered_data %>%
     df <- .
     has_wgd <- n_distinct(df$wgd_status) >= 2
     
+    # Choose formula based on available levels
     formula <- if (has_wgd) {
-      value ~ APM_Event + wgd_status + cibio_perMB
+      value ~ APM_Event + wgd_status + total_perMB + cna_burden
     } else {
-      value ~ APM_Event + cibio_perMB
+      value ~ APM_Event + total_perMB + cna_burden
     }
     
     tidy(lm(formula, data = df))
@@ -199,8 +168,10 @@ lm_res <- filtered_data %>%
          log2Ratio = log2(ratio),
          `-log10FDR` = -log10(fdr)) %>%
   ungroup()
+write.csv(lm_res, file = paste0(path_ciber, "/ciber_all_lm.csv"),row.names = F)
 
-# Summarize results
+lm_res <- fread(paste0(path_ciber, "/ciber_all_lm.csv"))
+
 significant_points <- subset(lm_res, fdr < 0.05)
 significant_type = unique(significant_points$histology_abbreviation)
 
@@ -232,6 +203,6 @@ plot_lm <- ggplot(lm_selected, aes(x = cell_type,  y = histology_abbreviation, f
     axis.ticks = element_line(color = "black")
   )
 
-plot_lm
-ggsave(filename =  paste0(path_figure, "/Figure1c.pdf"), plot = plot_lm, width = 6, height = 5, units = "in")
+plot_lm 
+ggsave(filename =  paste0(path_figure, "/Figure1C.pdf"), plot = plot_lm, width = 6, height = 5, units = "in")
 ```

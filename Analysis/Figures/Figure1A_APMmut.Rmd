@@ -40,19 +40,33 @@ source(paste0(PCAWG_path, "/code/source/oncoplot2.R"))
 
 # Set path
 ```{r}
-path_figure <- "/Users/wchen20/Desktop/2026-02-16_Draft/Revision_Figures/Original_output/"
-
-path_HLAmutations <- "/Users/wchen20/Desktop/2026-02-16_Draft/Final_Results/1_APM/1_HLAmutations/"
-path_HLALOH <- "/Users/wchen20/Desktop/2026-02-16_Draft/Final_Results/1_APM/2_HLALOH/"
-path_HomoDeletion <- "/Users/wchen20/Desktop/2026-02-16_Draft/Final_Results/1_APM/3_HomozygousDeletion/"
-path_APMall <- "/Users/wchen20/Desktop/2026-02-16_Draft/Final_Results/1_APM/4_APMall/"
+path_data <- "~/EvoGIEdata/"
+path_HLAmutations <- paste0(path_data, "/1_APM/1_HLAmutations/")
+path_HLALOH <- paste0(path_data, "/1_APM/2_HLALOH/")
+path_HomoDeletion <- paste0(path_data, "/1_APM/3_HomozygousDeletion/")
+path_APMall <- paste0(path_data, "/1_APM/4_APMall/")
+path_ciber <-  paste0(path_data, "/3_Cibersort/")
+path_dNdScvAPM <- paste0(path_data, "/4_dNdS_APM/")
+path_CRISPR <-  paste0(path_data, "/5_CRISPR/")
+path_RRA = paste0(path_data, "/5_CRISPR/RRA/")
+path_TopHits = paste0(path_data, "/5_CRISPR/TopHits/")
+path_RRA_leaveout <-  paste0(path_data, "/5_CRISPR/Leaveoneout/")
+path_CRISPRsum <-  paste0(path_data, "/5_CRISPR/Summary/")
+path_MutationFreq <- paste0(path_data, "/6_MutationFreq/")
+path_dNdScv <- paste0(path_data, "/7_dNdS_Pathway/")
+path_MutationTiming <- paste0(path_data, "/8_MutationTiming/")
+path_Phy = paste0(path_MutationTiming, "/timeline/nocnv/")
+path_Phy_loh = paste0(path_MutationTiming, "/timeline/wgd_hlaloh/")
+path_mutImpact = paste0(path_data, "/6_MutationFreq/mutation_impact/")
+path_oncoKB = paste0(path_data, "/6_MutationFreq/mutation_impact/oncoKB/")
+path_gritic = paste0(path_MutationTiming, "/min_drivermutation_250/")
 ```
 
 # 1. Figure 1A -- Plot for APM mutations + HLA LOH + homozygous deletion
 ```{r}
 # APM_event = HLAmut + HLALOH + nonHLAmut + noHLA_HD
-HLALOH_pcawg <- fread(paste0(path_APMall, "LOH_MSI_final_B.csv")) %>% 
-  subset(MSI_mut == "MSS") %>% 
+HLALOH_pcawg <- fread(paste0(path_APMall, "LOH_MSI_final_TMB_CNA.csv")) %>% 
+  #subset(MSI_mut == "MSS") %>% 
   mutate(APM_Event = factor(APM_Event, levels = c("APM-WT", "APM-Mutant"))) 
 table(HLALOH_pcawg$APM_Event)
 
@@ -110,5 +124,5 @@ APM_freq <- ggplot(TCGA_proj, aes(x = histology_abbreviation, y = Total, fill = 
     size = 4.5
   )
 
-ggsave(filename = paste0(path_figure, "/Figure1a.pdf"), plot = APM_freq, width = 14, height = 6, units = "in")
+ggsave(filename = paste0(path_figure, "/Figure1A.pdf"), plot = APM_freq, width = 14, height = 6, units = "in")
 ```

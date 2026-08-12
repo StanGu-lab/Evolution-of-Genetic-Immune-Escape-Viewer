@@ -35,22 +35,15 @@ suppressMessages(library("ggsci"))
 suppressMessages(library("cowplot"))
 suppressMessages(library("ggdist"))
 
-PCAWG_path <- "/Users/wchen20/Desktop/PCAWG/"
-gritic_path <- paste0(PCAWG_path, "/MHC_evolution/GRITIC/output")
+PCAWG_path <- "~/Desktop/PCAWG/"
 
-source("/Users/wchen20/Desktop/PCAWG/code/source/basic.R")
-source("/Users/wchen20/Desktop/PCAWG/code/source/EnrichedView_modified.R")
-source("/Users/wchen20/Desktop/PCAWG/code/source/insert_newlines.R")
-source("/Users/wchen20/Desktop/PCAWG/code/source/CRP_MAGEMSig0409.R")
+source("~/Desktop/PCAWG/code/source/basic.R")
+source("~/Desktop/PCAWG/code/source/EnrichedView_modified.R")
+source("~/Desktop/PCAWG/code/source/insert_newlines.R")
+source("~/Desktop/PCAWG/code/source/CRP_MAGEMSig0409.R")
 ```
 
-# Set Path
-```{r}
-path_figure <- "/Users/wchen20/Desktop/2026-02-16_Draft/Revision_Figures/Original_output/"
-path_MutationFreq <- "/Users/wchen20/Desktop/2026-02-16_Draft/Final_Results/6_MutationFreq/"
-```
-
-# Figure 3a -- results generated from /Users/wchen20/Desktop/2026-02-16_Draft/code/Revision/workflow/3_2_3_CRISPR_MutationFreq.Rmd
+# Figure 3a
 ```{r}
 cell_types <- c("Tcells", "MHCregulators", "NKcells", "Macrophages", "GammadeltaTcells")
 regulators <- c("pos", "neg")
@@ -66,15 +59,16 @@ for (cell_type in cell_types) {
     "#87AFC6"  # Light red
   }
   
-  CRISPR_path <- "/Users/wchen20/Desktop/2026-02-16_Draft/Revision/R1Major2/005/"
+  CRISPR_path <- "~/Desktop/2026-02-16_Draft/Revision/R1Major2/005/"
   
   #CRISPR_pathways <- read.csv(paste0(CRISPR_path, "/Summary/", cell_type, "_C5BP_", reg, "_list.csv"), header = T) 
-  
-  Freq_all <- fread(paste0(path_MutationFreq, "/", cell_type, "_Freq_oncoMSS.csv")) %>% filter(percent_mut < 1) %>%
-  mutate(pathway_new = sapply(pathway_new, insert_newlines_every_five_words), pathway_new)
+  Freq_all <- fread(paste0(path_MutationFreq, "/", cell_type, "_Freq_oncoMSS.csv")) %>% 
+        filter(percent_mut < 1) %>%
+        mutate(pathway_new = sapply(pathway_new, insert_newlines_every_five_words), pathway_new)
+    #filter(!histology_abbreviation %in% c("Cervix-AdenoCA", "Bone-Epith", "Breast-LobularCA")) # Cancer type with few samples
 
   # Select top pathways
-  Freq_top <- Freq_all %>%
+  Freq_top <- Freq_all %>% 
   distinct(regulator, pathway, .keep_all = TRUE) %>%
   filter(regulator == reg) %>%
   group_by(regulator) %>%
@@ -184,21 +178,21 @@ for (cell_type in cell_types) {
   
   combined_plot[[paste0(cell_type, "_", reg)]] <- plot_grid(boxplot, barplot, ncol = 1, align = "v", rel_heights = c(1, 1))
   
-  ggsave(
-    filename = paste0(path_figure, "/", cell_type, "_", reg, ".pdf"),
-    plot = combined_plot[[paste0(cell_type, "_", reg)]],
-    width = 7.5,
-    height = 6
-  )
+  #ggsave(
+  #  filename = paste0(path_figure, "/", cell_type, "_", reg, ".pdf"),
+  #  plot = combined_plot[[paste0(cell_type, "_", reg)]],
+  #  width = 7.5,
+  #  height = 6
+  #)
   }
   
-  combined_plot <- combined_plot[[1]] + combined_plot[[2]]
-  ggsave(
-    filename = paste0(path_figure, "/", cell_type, ".pdf"),
-    plot = combined_plot,
-    width = 14,
-    height = 5.5
-  )
+  #combined_plot <- combined_plot[[1]] + combined_plot[[2]]
+  #ggsave(
+  #  filename = paste0(path_figure, "/", cell_type, ".pdf"),
+  #  plot = combined_plot,
+  #  width = 14,
+  #  height = 5.5
+  #)
   
   combined_plot <- combined_plot[[1]] / combined_plot[[2]]
   ggsave(

@@ -21,130 +21,13 @@ library("tidyr")
 library("stringr")
 library("ggplot2")
 
-PCAWG_path <- "/rsrch6/scratch/hema_bio-Malignan/wchen20/PCAWG"
-PCAWG_path <- "/Users/wchen20/Desktop/PCAWG"
+PCAWG_path <- "~/Desktop/PCAWG"
 
-source("/Users/wchen20/Desktop/PCAWG/code/source/basic.R")
-source("/Users/wchen20/Desktop/PCAWG/code/source/plot_dnnsall.R")
-
-rename_list <- fread("/Users/wchen20/Desktop/PCAWG/CRISPR/CRISPRscreen20240118/rename_list.csv")
-rename_list$pathway <- str_to_title(rename_list$pathway)
-
-date <- "250807"
-dNdScv_dir <- paste0("/Users/wchen20/Desktop/PCAWG/MHC_evolution/DNDS/dNdScv/dNdScvAPM/", date, "/")
-dNdScv_input <- "/Users/wchen20/Desktop/PCAWG/MHC_evolution/DNDS/dNdScv/250807/mutations_dNdScv_updated_withsynHLA.txt"
-path_figure <- "/Users/wchen20/Desktop/PCAWG/Figures/20250904/"
+source("~/Desktop/PCAWG/code/source/basic.R")
+source("~/Desktop/PCAWG/code/source/plot_dnnsall.R")
 ```
 
-# Souce
-```{r}
-# *globaldnds.: /Users/wchen20/Desktop/2026-02-16_Draft/code/Revision/workflow/3_2_CRISPR_dndscv.Rmd
-```
-
-# Set path
-```{r}
-path_figure <- "/Users/wchen20/Desktop/2026-02-16_Draft/Revision_Figures/Original_output/"
-path_figure <- "/Users/wchen20/Desktop/2026-02-16_Draft/Revision_Figures/Original_output/check/"
-
-path_CRISPR = "/Users/wchen20/Desktop/2026-02-16_Draft/Final_Results/5_CRISPR/"
-path_RRA = "/Users/wchen20/Desktop/2026-02-16_Draft/Final_Results/5_CRISPR/RRA/"
-path_dNdScv = "/Users/wchen20/Desktop/2026-02-16_Draft/Final_Results/7_dNdS_Pathway/"
-```
-
-## Figure 7
-## Summary
-```{r}
-rename_list <- fread(paste0(path_CRISPR, "/rename_list.csv"))
-rename_list$pathway <- str_to_title(rename_list$pathway)
-
-source("/Users/wchen20/Desktop/PCAWG/code/source/plot_dnnsall.R")
-modes = c("single", "all")
-mode="all"
-mode = "single"
-date= "260318"
-
-cell_types <- c("Tcells", "MHCregulators", "NKcells", "Macrophages", "GammadeltaTcells")
-
-for (cell_type in cell_types) {
-    
-    for (mode in modes) {
-    
-    dnds_path <- paste0("/Users/wchen20/Desktop/2026-02-16_Draft/Revision/R2Major3/DNDS/", date, "/", mode, "/with_driver/", cell_type, "/")
-    
-    file_list <- list.files(path = dnds_path, pattern = ".*globaldnds.*", recursive = FALSE, full.names = TRUE)
-    
-    df_list <- list()
-    
-    for (file in file_list) {
-      file_name <- basename(file)
-      file_name <- gsub("globaldnds_", "", file_name)
-      file_name <- gsub("GOBP", "", file_name)
-      file_name <- gsub(".csv", "", file_name)
-      file_name <- gsub("all_", "", file_name)
-      
-      dnds <- fread(file) %>% mutate(file = file_name)
-      df_list[[file_name]] <- dnds
-    } 
-    
-    if (mode == "all") {
-      
-      dnds_df <-  rbindlist(df_list, fill = TRUE) %>% 
-        filter(is.finite(cilow), cilow != 0, is.finite(cihigh), cihigh != 0) %>%
-        tidyr::separate(file, into = c("cell_type", "regulator", "pathway"), extra = "merge", fill = "right") %>%
-        mutate(pathway = str_to_title(pathway)) %>%
-        inner_join(., rename_list, by = "pathway") %>% 
-        mutate(pathway = pathway_new,
-               reg = ifelse(regulator== "pos", "Positive", "Negative"),
-               MLE = log2(mle),
-               upper = log2(cihigh),
-               lower = log2(cilow),
-               sig = ifelse((MLE > 0 & upper > 0 & lower > 0) | (MLE < 0 & upper < 0 & lower < 0), "true", "false"),
-               Type = name) 
-      write_csv(dnds_df, paste0(dnds_path, "/all_",cell_type, ".csv"))
-      
-      pathway_order <- dnds_df %>% arrange(desc(reg)) %>% pull(pathway) %>% unique()
-      dnds_df$pathway <- factor(dnds_df$pathway, pathway_order)
-      
-      dnds_list <- dnds_df %>% filter(sig == "true", name == "wall") %>% pull(pathway_new) %>% unique()
-      
-      if (cell_type == "NKcells") {
-        
-        dnds_sig <- dnds_df %>% filter(pathway_new %in% dnds_list) %>% 
-          mutate(pathway_new = sapply(pathway_new, insert_newlines_every_five_words2))
-        
-      } else {
-        
-        dnds_sig <- dnds_df %>% filter(pathway_new %in% dnds_list) %>% 
-          mutate(pathway_new = sapply(pathway_new, insert_newlines_every_five_words2))
-      }
-     
-      dNdScvsig_plot <- plot_dnnsall(dnds_sig)
-      
-      ggsave(filename = paste0(dnds_path, "/dNdScv_", cell_type, ".pdf"), plot = dNdScvsig_plot,  width = 4, height = 2.5, units = "in")
-      
-      
-    } else {
-      
-      dnds_df <-  rbindlist(df_list, fill = TRUE) %>% 
-        filter(is.finite(cilow), cilow != 0, is.finite(cihigh), cihigh != 0) %>%
-        tidyr::separate(file, into = c("cancer_type", "cell_type", "regulator", "pathway"), sep = "_", extra = "merge", fill = "right") %>%
-        mutate(pathway = str_to_title(pathway)) %>%
-        inner_join(., rename_list, by = "pathway") %>% 
-        mutate(pathway = pathway_new,
-               reg = ifelse(regulator== "pos", "Positive", "Negative"),
-               MLE = log2(mle),
-               upper = log2(cihigh),
-               lower = log2(cilow),
-               sig = ifelse((MLE > 0 & upper > 0 & lower > 0) | (MLE < 0 & upper < 0 & lower < 0), "true", "false"),
-               Type = name) 
-      write_csv(dnds_df, paste0(dnds_path, "/dndsall_",cell_type, ".csv"))
-      
-    }
-    
-    }
-}
-```
-
+# SFigure 11
 ## Make plot
 ```{r}
 dNdScv_plot <- list()

@@ -33,25 +33,9 @@ suppressMessages(library("ggsci"))
 suppressMessages(library("cowplot"))
 suppressMessages(library("ggdist"))
 
-PCAWG_path <- "/Users/wchen20/Desktop/PCAWG/"
+PCAWG_path <- "~/Desktop/PCAWG/"
 source(paste0(PCAWG_path, "/code/source/basic.R"))
 source(paste0(PCAWG_path, "/code/source/oncoplot2.R"))
-
-LOH_MSI = LOH_mut <- fread(paste0(PCAWG_path, "/donors_and_biospecimens/LOH_MSI_final.csv"))
-LOH_type <- LOH_MSI %>% mutate(sample_id = aliquot_id) %>% dplyr::select(sample_id, histology_abbreviation)
-LOH_aliquot <- LOH_MSI %>% mutate(sample_id = aliquot_id) %>% dplyr::select(sample_id, icgc_sample_id, MSI_mut)
-LOH_MSS <- LOH_MSI %>% filter(MSI_mut == "MSS")
-sample_MSS <- LOH_MSS  %>% pull(aliquot_id)
-```
-
-# Set path
-```{r}
-path_figure <- "/Users/wchen20/Desktop/2026-02-16_Draft/Revision_Figures/Original_output/"
-
-path_HLAmutations <- "/Users/wchen20/Desktop/2026-02-16_Draft/Final_Results/1_APM/1_HLAmutations/"
-path_HLALOH <- "/Users/wchen20/Desktop/2026-02-16_Draft/Final_Results/1_APM/2_HLALOH/"
-path_HomoDeletion <- "/Users/wchen20/Desktop/2026-02-16_Draft/Final_Results/1_APM/3_HomozygousDeletion/"
-path_APMall <- "/Users/wchen20/Desktop/2026-02-16_Draft/Final_Results/1_APM/4_APMall/"
 ```
 
 # SFigure 2A
@@ -59,7 +43,7 @@ path_APMall <- "/Users/wchen20/Desktop/2026-02-16_Draft/Final_Results/1_APM/4_AP
 row_order = c("HLALOH", "HLA-A", "B2M", "NLRC5", "TAP1", "HLA-B", "ERAP2", "TAP2", "TAPBP", "ERAP1", "PSMB8", "HLA-C", 
               "PSMB10","PSMB9", "Homozygous Deletion")
 
-mat1 <- fread(paste0(path_APMall, "onco_APM_hlaloh.txt"), sep = "\t", quote = FALSE) %>% column_to_rownames("V1")
+mat1 <- fread(paste0(path_APMall, "onco_APM_hlaloh.txt"), sep = "\t", quote = FALSE, header = T) %>% column_to_rownames("V1")
 
 title = "Antigen Presentation Machinery"
 filename = paste0(path_figure, "/SFigure2a.pdf")

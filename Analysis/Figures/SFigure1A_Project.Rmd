@@ -35,26 +35,17 @@ suppressMessages(library("ggsci"))
 suppressMessages(library("cowplot"))
 suppressMessages(library("ggdist"))
 
-PCAWG_path <- "/Users/wchen20/Desktop/PCAWG/"
-gritic_path <- paste0(PCAWG_path, "/MHC_evolution/GRITIC/output")
+PCAWG_path <- "~/Desktop/PCAWG/"
 
-source("/Users/wchen20/Desktop/PCAWG/code/source/basic.R")
-source("/Users/wchen20/Desktop/PCAWG/code/source/EnrichedView_modified.R")
-source("/Users/wchen20/Desktop/PCAWG/code/source/insert_newlines.R")
-source("/Users/wchen20/Desktop/PCAWG/code/source/CRP_MAGEMSig0409.R")
-
-LOH_MSI = LOH_mut <- fread(paste0(PCAWG_path, "/donors_and_biospecimens/LOH_MSI_final.csv"))
-LOH_type <- LOH_MSI %>% mutate(sample_id = aliquot_id) %>% dplyr::select(sample_id, histology_abbreviation)
-LOH_aliquot <- LOH_MSI %>% mutate(sample_id = aliquot_id) %>% dplyr::select(sample_id, icgc_sample_id, MSI_mut)
-LOH_MSS <- LOH_MSI %>% filter(MSI_mut == "MSS")
-LOH_MSStcga <- LOH_MSI %>% filter(proj == "tcga")
-sample_MSS <- LOH_MSS  %>% pull(aliquot_id)
-figure_path <- "/Users/wchen20/Desktop/2026-02-16_Draft/Revision_Figures/"
+source("~/Desktop/PCAWG/code/source/basic.R")
+source("~/Desktop/PCAWG/code/source/EnrichedView_modified.R")
+source("~/Desktop/PCAWG/code/source/insert_newlines.R")
+source("~/Desktop/PCAWG/code/source/CRP_MAGEMSig0409.R")
 ```
 
 ## Summary
 ```{r}
-LOH_MSI <- fread("/Users/wchen20/Desktop/PCAWG/donors_and_biospecimens/LOH_MSI_final.csv") %>% filter(MSI_mut == "MSS")
+LOH_MSI <- fread(paste0(path_APMall, "/LOH_MSI_final_B.csv")) %>% filter(MSI_mut == "MSS")
 
 summary_proj <- LOH_MSI %>%
   dplyr::count(histology_abbreviation, proj) %>%
@@ -80,7 +71,8 @@ summary_sampletype <- LOH_MSI %>%
   arrange(histology_abbreviation)
 
 summary <- inner_join(summary_proj, summary_sampletype, by = "histology_abbreviation")
-write.csv(summary, file= "/Users/wchen20/Desktop/2026-02-16_Draft/Revision/R2Major10/PCAWG_samplelist.csv", row.names = F)
+write.csv(summary, file= paste0(path_APMall, "/PCAWG_samplelist.csv"), row.names = F)
+write.csv(summary, file= "~/Desktop/2026-02-16_Draft/Revision/R2Major10/PCAWG_samplelist.csv", row.names = F)
 
 df_sorted <- LOH_MSI %>% 
   mutate(project = ifelse(proj == "tcga", "TCGA", "ICGC")) %>%
@@ -133,6 +125,5 @@ plot_proj <-ggplot(df_sorted, aes(x = histology_abbreviation, fill = project)) +
   ))
 
 plot_combined <- plot_proj + plot_tumorstatus 
-ggsave(filename = "/Users/wchen20/Desktop/2026-02-16_Draft/Revision/R2Major10/Overview.pdf", plot = plot_combined, width = 9, height = 5, units = "in")
-ggsave(filename = paste0(figure_path, "/SFigure1.pdf"), plot = plot_combined, width = 9, height = 5, units = "in")
+ggsave(filename = paste0(path_figure, "/SFigure1.pdf"), plot = plot_combined, width = 9, height = 5, units = "in")
 ```

@@ -66,7 +66,7 @@ path_figure <- "/Users/wchen20/Desktop/2026-02-16_Draft/Revision_Figures/Origina
 
 # APM timing
 ```{r}
-diff_all <- fread("/Users/wchen20/Desktop/PCAWG/MHC_evolution/GRITIC/output/allmutation/mafgritic_nonsyn/pathway/min_drivermutation_250/diff_all_selected_drivermutation.csv") %>% 
+diff_all <- fread(paste0(path_MutationTiming, "/min_drivermutation_250/diff_all_selected_drivermutation.csv")) %>% 
   filter(aliquot_id %in% sample_MSS)
 
 data_all <- diff_all %>% filter(pathway == "APM")
@@ -121,6 +121,5 @@ plot_APM <- cowplot::plot_grid(timing_propAPM,
       ncol = 2,  
       rel_widths = c(1.5, 0.3))
 
-ggsave(filename = paste0(path_figure, "/Figure2D_APM.pdf"), plot = plot_APM,  width = 6, height = 5.5, units = "in")
+ggsave(filename = paste0(path_figure, "/Figure3D_APM.pdf"), plot = plot_APM,  width = 6, height = 5.5, units = "in")
 ```
-

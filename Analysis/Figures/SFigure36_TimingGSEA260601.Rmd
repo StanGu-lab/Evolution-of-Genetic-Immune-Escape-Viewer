@@ -37,19 +37,13 @@ suppressMessages(library("ggdist"))
 suppressMessages(library("openxlsx"))
 suppressMessages(library("stringr"))
 
-PCAWG_path <- "/Users/wchen20/Desktop/PCAWG/"
+PCAWG_path <- "~/Desktop/PCAWG/"
 gritic_path <- paste0(PCAWG_path, "/MHC_evolution/GRITIC/output")
 
-source("/Users/wchen20/Desktop/PCAWG/code/source/basic.R")
-source("/Users/wchen20/Desktop/PCAWG/code/source/EnrichedView_modified.R")
-source("/Users/wchen20/Desktop/PCAWG/code/source/insert_newlines.R")
-source("/Users/wchen20/Desktop/PCAWG/code/source/CRP_MAGEMSig0409.R")
-```
-
-# Set Path
-```{r}
-GSEA_pcawg <- "/Users/wchen20/Desktop/2026-02-16_Draft/Revision/R1Major7/GSEA/20260601/"
-save_path <- GSEA_pcawg
+source("~/Desktop/PCAWG/code/source/basic.R")
+source("~/Desktop/PCAWG/code/source/EnrichedView_modified.R")
+source("~/Desktop/PCAWG/code/source/insert_newlines.R")
+source("~/Desktop/PCAWG/code/source/CRP_MAGEMSig0409.R")
 ```
 
 # SFigure

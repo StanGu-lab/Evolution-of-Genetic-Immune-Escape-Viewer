@@ -1,0 +1,175 @@
+---
+title: "Spath_figurewaySummary"
+author: "AJ"
+date: "2026-04-17"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# 0. Libray packages
+```{r}
+rm(list = ls())
+
+suppressMessages(library("ggplot2"))
+suppressMessages(library("patchwork"))
+suppressMessages(library("ggpubr"))
+suppressMessages(library("maftools"))
+suppressMessages(library("survival"))
+suppressMessages(library("survminer"))
+suppressMessages(library("tidyr"))
+suppressMessages(library("broom"))
+suppressMessages(library("data.table"))
+suppressMessages(library("dplyr"))
+suppressMessages(library("ggh4x"))
+suppressMessages(library("forcats"))
+suppressMessages(library("textshape"))
+suppressMessages(library("matrixStats"))
+suppressMessages(library("ggrepel"))
+suppressMessages(library("tibble"))
+suppressMessages(library("readr"))
+suppressMessages(library("ggradar"))
+suppressMessages(library("ggsci"))
+suppressMessages(library("cowplot"))
+suppressMessages(library("ggdist"))
+
+PCAWG_path <- "/Users/wchen20/Desktop/PCAWG/"
+gritic_path <- paste0(PCAWG_path, "/MHC_evolution/GRITIC/output")
+
+source("/Users/wchen20/Desktop/PCAWG/code/source/basic.R")
+source("/Users/wchen20/Desktop/PCAWG/code/source/EnrichedView_modified.R")
+source("/Users/wchen20/Desktop/PCAWG/code/source/insert_newlines.R")
+source("/Users/wchen20/Desktop/PCAWG/code/source/CRP_MAGEMSig0409.R")
+```
+
+# Source
+```{r}
+# *_C5BP_*.csv: /Users/wchen20/Desktop/2026-02-16_Draft/code/Revision/workflow/2_1_CRISPR_crossvalidation_TopHits.Rmd
+```
+
+# Set path
+```{r}
+path_figure <- "/Users/wchen20/Desktop/2026-02-16_Draft/Revision_Figures/Original_output/"
+path_figure <- "/Users/wchen20/Desktop/2026-02-16_Draft/Revision_Figures/Original_output/check/"
+
+path_CRISPR = "/Users/wchen20/Desktop/2026-02-16_Draft/Final_Results/5_CRISPR/"
+path_TopHits <- "/Users/wchen20/Desktop/2026-02-16_Draft/Final_Results/5_CRISPR/TopHits/"
+```
+
+# SFigure 4_6
+```{r}
+rename_list <- fread(paste0(path_CRISPR, "/rename_list.csv"))
+rename_list$pathway <- str_to_title(rename_list$pathway)
+
+cell_types <- cell_types <- c("MHCregulators", "Tcells", "NKcells", "Macrophages", "GammadeltaTcells")
+regulators <- c("pos", "neg")
+cutoff_suff = "005"
+
+freqdot_plot <- list()
+freqdot_plot_2 <- list()
+
+for (i in c(50, 100, 200)) {
+  
+  for (cell_type in cell_types) {
+  
+  for (reg in regulators) {
+    
+    if (cell_type %in% c("Tcells", "MHCregulators")) {
+      unit = 0.8
+    } else if (cell_type %in% c("Macrophages", "GammadeltaTcells", "NKcells")) {
+      unit = 0.5
+    }
+  
+    if (cell_type == "Tcells") {
+        cell_type_title = "T-cell Killing"
+      } else if (cell_type == "NKcells")  {
+        cell_type_title = "NK-cell Killing"
+      } else if (cell_type == "GammadeltaTcells")  {
+        cell_type_title = "gdT-cell Killing"
+      } else if (cell_type == "Macrophages")  {
+        cell_type_title = "Macrophage Killing"
+      } else if (cell_type == "MHCregulators") {
+        cell_type_title = "MHC-I"
+      }
+    
+    if (reg == "pos" & cell_type != "MHCregulators") {
+        reg_title = "Sensitive to "
+      } else if (reg == "neg" & cell_type != "MHCregulators") {
+        reg_title = "Resistant to "
+      } else if (reg == "pos" & cell_type == "MHCregulators") {
+        reg_title = "Postive Regulation of "
+      } else if (reg == "neg" & cell_type == "MHCregulators") {
+        reg_title = "Negative Regulation of "
+      }
+    
+  CRISPR_path <- paste0(path_TopHits, cell_type)
+  CRISPR_list_path <- paste0("/Users/wchen20/Desktop/2026-02-16_Draft/Final_Results/5_CRISPR/")
+  
+  CRISPR_pathways <- read.csv(paste0(CRISPR_list_path, "/Summary/", cell_type, "_C5BP_", reg, "_list.csv"), header = T)  %>%
+    dplyr::select("ID", "Description")
+    
+  CRISPR_all <- fread(paste0(CRISPR_path, "/Summary/", cutoff_suff, "/", cell_type, "_C5BP_", reg, i, ".csv")) %>% 
+    inner_join(., CRISPR_pathways, by = c("ID", "Description")) %>%
+    mutate(logp = -log10(`p.adjust`),
+           pathway = str_to_title(Description),
+           pathway = sub("Nod1-2", "Nod1_2", pathway)) %>% 
+    inner_join(rename_list,., by = "pathway") %>% 
+    mutate(pathway_new = sapply(pathway_new, insert_newlines_every_five_words2))
+  
+  CRISPR_order <- CRISPR_all %>% distinct(pathway_new, .keep_all = TRUE) %>% 
+    arrange(Freq, desc(pathway_new)) %>%
+    pull(pathway_new)
+  
+  CRISPR_all <- CRISPR_all %>% mutate(pathway_new = factor(pathway_new, level = CRISPR_order))
+  
+  study_number <- unique(CRISPR_all$total_study)
+  print(paste0(cell_type, "_", reg, "_study_number:", study_number))
+  
+  key <- paste0(cell_type, "_", reg, sep = "")
+  plot_key <- paste0(reg_title, cell_type_title)
+  ploy_title <- paste0(plot_key, "\n (n = ", study_number, ")")
+  
+  freqdot_plot[[key]] <- ggplot(CRISPR_all, aes(x = pathway_new, y = logp, fill = Count)) +
+  geom_point(shape = 21, stroke = 0.5, alpha = 1, size = 3) +
+  coord_flip() +
+  scale_size_continuous(range = c(0, 6)) + 
+  scale_fill_gradient(low = "#66AAD4", high = "#08306B",
+    breaks = scales::breaks_pretty(n = 3)(range(CRISPR_all$Count)),  # Automatically select 3 breaks
+    labels = function(x) round(x)  # Set integer labels
+  ) +
+  labs(x = "", y = "-Log(p.adj)", title = "") +
+  guides(color = guide_colorbar(title = "Count"), label.theme = element_text(size = 10)) +
+  #scale_fill_gradient(low = "#66AAD4", high = "#08306B") +
+  theme_minimal() +
+  theme(axis.text.x = element_text(hjust = 0.5, vjust = 0.5, size = 12, color = "black"),
+        axis.text.y = element_text(hjust = 1, vjust = 0.5, size = 12, color = "black"),
+        legend.position = "right",
+        legend.key.size = unit(unit, "cm"), 
+        legend.text = element_text(size = 10), 
+        panel.grid.major = element_blank(),
+        panel.grid.minor = element_blank(),
+        panel.background = element_blank(),
+        axis.line = element_line(color = "black"),
+        axis.ticks = element_line(color = "black"),
+        plot.margin = margin(t = 5, b = 5, l = 10, r = 10)) +
+  #scale_y_continuous(breaks = scales::breaks_pretty(n = 2)(range(CRISPR_all$logp)),
+  #                   labels = function(y) round(y)) +
+  geom_text(aes(label = Freq, y = max(logp) + 2), hjust = 0.5, size = 4) +
+  ggtitle(ploy_title) + theme(plot.title = element_text(size = 18, hjust = 0.5))
+  
+  #ggsave(filename = paste0(CRISPR_path, "/Summary/", cutoff_suff, "/", cell_type, "_BP_", reg, i, "_freqdot.pdf"), plot = freqdot_plot[[plot_key]], width = 6, height = 6.5, units = "in")
+  
+  }
+  
+  freqdot_plot_2[[cell_type]] <- freqdot_plot[[paste0(cell_type, "_", "pos")]] + freqdot_plot[[paste0(cell_type, "_", "neg")]]
+  ggsave(filename = paste0(CRISPR_path, "/Summary/", cutoff_suff, "/", cell_type, i, "_BP_freqdot.pdf"), plot = freqdot_plot[[cell_type]], width = 12, height = 6.5, units = "in")
+
+  }
+  
+  freqdot_plot_all <- freqdot_plot_2[[1]] / freqdot_plot_2[[2]] / freqdot_plot_2[[3]] / freqdot_plot_2[[4]] / freqdot_plot_2[[5]]
+  ggsave(filename = paste0(path_figure, "/SFigure4_6_", i, ".pdf"), plot = freqdot_plot_all, width = 10, height = 20, units = "in")
+  
+}
+```

@@ -1,0 +1,157 @@
+---
+title: "Figure1EF"
+author: "AJ"
+date: "2025-08-14"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# 0. Libray packages
+```{r}
+rm(list = ls())
+
+suppressMessages(library("ggplot2"))
+suppressMessages(library("patchwork"))
+suppressMessages(library("ggpubr"))
+suppressMessages(library("maftools"))
+suppressMessages(library("survival"))
+suppressMessages(library("survminer"))
+suppressMessages(library("tidyr"))
+suppressMessages(library("broom"))
+suppressMessages(library("data.table"))
+suppressMessages(library("dplyr"))
+suppressMessages(library("ggh4x"))
+suppressMessages(library("forcats"))
+suppressMessages(library("textshape"))
+suppressMessages(library("matrixStats"))
+suppressMessages(library("ggrepel"))
+suppressMessages(library("tibble"))
+suppressMessages(library("readr"))
+suppressMessages(library("ggradar"))
+suppressMessages(library("ggsci"))
+suppressMessages(library("cowplot"))
+suppressMessages(library("ggdist"))
+
+PCAWG_path <- "/Users/wchen20/Desktop/PCAWG/"
+gritic_path <- paste0(PCAWG_path, "/MHC_evolution/GRITIC/output")
+
+source("/Users/wchen20/Desktop/PCAWG/code/source/basic.R")
+source("/Users/wchen20/Desktop/PCAWG/code/source/EnrichedView_modified.R")
+source("/Users/wchen20/Desktop/PCAWG/code/source/insert_newlines.R")
+source("/Users/wchen20/Desktop/PCAWG/code/source/CRP_MAGEMSig0409.R")
+```
+
+# Source
+```{r}
+# RRAcombined_fdr.csv: /Users/wchen20/Desktop/2026-02-16_Draft/code/Revision/workflow/2_2_CRISPR_crossvalidation_RRA.Rmd
+# *_C5BP_*_list.csv: /Users/wchen20/Desktop/2026-02-16_Draft/code/Revision/workflow/2_2_CRISPR_crossvalidation_RRA.Rmd (maunally generated)
+```
+
+# Set path
+```{r}
+path_figure <- "/Users/wchen20/Desktop/2026-02-16_Draft/Revision_Figures/Original_output/"
+path_figure <- "/Users/wchen20/Desktop/2026-02-16_Draft/Revision_Figures/Original_output/check/"
+
+path_CRISPR = "/Users/wchen20/Desktop/2026-02-16_Draft/Final_Results/5_CRISPR/"
+path_RRA = "/Users/wchen20/Desktop/2026-02-16_Draft/Final_Results/5_CRISPR/RRA/"
+```
+
+# Figure 1EF
+```{r}
+rename_list <- fread(paste0(path_CRISPR, "/rename_list.csv"))
+rename_list$pathway <- str_to_title(rename_list$pathway)
+data_rra <- fread(paste0(path_RRA, "/RRAcombined_fdr.csv"))
+
+plot_all <- list()
+plot_enrich <- list()
+
+regulation_colors = c("#1F78B4", "#E31A1C", "grey")
+names(regulation_colors) = c("Negative", "Positive", "NS")
+
+CRISPR_path <- "/Users/wchen20/Desktop/2026-02-16_Draft/Revision/R1Major2/005/"
+
+for (cell_type in  c("MHCregulators", "Tcells", "NKcells", "Macrophages", "GammadeltaTcells")) {
+  
+  pos_rank <- fread(paste0(CRISPR_path, "/Summary/", cell_type, "_C5BP_pos_list.csv"))
+  pos_rank$Description <- str_to_title(pos_rank$Description)
+  pos_rank <- pos_rank %>% mutate(pathway = Description) %>% inner_join(rename_list, by = "pathway")
+  
+  enrichment <- pos_rank %>% mutate(`-logFDR` = round(-log10(p.adjust), 1),
+                                    Regulation = "Positive",
+                                    Description = sapply(pathway_new, insert_newlines_every_five_words2), pathway_new,
+                                    `NES(abs)` = abs(NES)) %>% 
+    arrange(Regulation, abs(`-logFDR`))
+  
+  enrichment_order <- enrichment %>% pull(Description) %>% unique()
+  enrichment <- enrichment %>% mutate(Description = factor(Description, levels = enrichment_order))
+  
+  x_max <- round(max(abs(enrichment$`-logFDR`)), 0)
+  
+  plot_enrich_pos <- ggplot(data=enrichment, aes_string(x = "`-logFDR`", y = "Description", size = "abs(NES)")) + 
+    geom_point(aes(color = Regulation)) +
+    scale_color_manual(values = regulation_colors) +
+    theme(panel.background = element_blank(),
+          legend.position = "right",
+          legend.key = element_rect(fill = "transparent", colour = "transparent"),
+          plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
+          axis.text.x = element_text(colour = "black"),
+          axis.text.y = element_text(colour = "black", size = 15),
+          axis.line = element_line(color = "black"),
+          axis.ticks = element_line(color = "black"))  +
+    labs(x = "-log10FDR", y = "", size = "NES") +
+    scale_x_continuous(limits = c(0, x_max + 1)) +
+    scale_size_continuous(range = c(3, 5)) +
+    guides(color = "none")
+  
+  plot_enrich_pos
+
+  neg_rank <- fread(paste0(CRISPR_path, "/Summary/", cell_type, "_C5BP_neg_list.csv")) 
+  neg_rank$Description <- str_to_title(neg_rank$Description)
+  neg_rank <- neg_rank %>% mutate(pathway = Description) %>% inner_join(rename_list, by = "pathway")
+  
+  enrichment <- neg_rank %>% mutate(`-logFDR` = round(-log10(p.adjust), 1),
+                                    Regulation = "Negative",
+                                    Description = sapply(pathway_new, insert_newlines_every_five_words2), pathway_new,
+                                    `NES(abs)` = abs(NES)) %>% 
+    arrange(Regulation, abs(`-logFDR`))
+  
+  enrichment_order <- enrichment %>% pull(Description) %>% unique()
+  enrichment <- enrichment %>% mutate(Description = factor(Description, levels = enrichment_order))
+  
+  x_max <- round(max(abs(enrichment$`-logFDR`)), 0)
+  
+  plot_enrich_neg <- ggplot(data=enrichment, aes_string(x = "`-logFDR`", y = "Description", size = "abs(NES)")) + 
+    geom_point(aes(color = Regulation)) +
+    scale_color_manual(values = regulation_colors) +
+    theme(panel.background = element_blank(),
+          legend.position = "right",
+          legend.key = element_rect(fill = "transparent", colour = "transparent"),
+          plot.title = element_text(hjust = 0.5, size = 16, face = "bold"),
+          axis.text.x = element_text(colour = "black"),
+          axis.text.y = element_text(colour = "black", size = 15),
+          axis.line = element_line(color = "black"),
+          axis.ticks = element_line(color = "black"))  +
+    labs(x = "-log10FDR", y = "", size = "NES") +
+    scale_x_continuous(limits = c(0, x_max + 1)) +
+    scale_size_continuous(range = c(3, 5)) +
+    guides(color = "none")
+  
+  plot_enrich_neg
+  
+  plot_enrich[[cell_type]] <-  plot_enrich_pos +  plot_enrich_neg
+
+  ggsave(filename = paste0(path_RRA, "/", cell_type, "_rank.pdf"), plot = plot_enrich[[cell_type]], width = 10, height = 5, units = "in")
+}
+
+ggsave(filename = paste0(path_figure, "/Figure1E_pathwayRRA.pdf"), plot = plot_enrich[[1]], width = 10, height = 5, units = "in")
+ggsave(filename = paste0(path_figure, "/Figure1F_pathwayRRA.pdf"), plot = plot_enrich[[2]], width = 10, height = 5, units = "in")
+```
+
+## SFigure 9
+```{r}
+plot_enrich_other <- plot_enrich[[3]]/plot_enrich[[4]]/plot_enrich[[5]]
+ggsave(filename = paste0(path_figure, "/SFigure8_pathwayRRA_other.pdf"), plot = plot_enrich_other, width = 10, height = 10, units = "in")
+```

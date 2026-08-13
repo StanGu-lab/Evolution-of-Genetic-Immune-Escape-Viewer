@@ -1,0 +1,231 @@
+---
+title: "Spath_figurewaySummary"
+author: "AJ"
+date: "2026-04-17"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# 0. Libray packages
+```{r}
+rm(list = ls())
+
+suppressMessages(library("ggplot2"))
+suppressMessages(library("patchwork"))
+suppressMessages(library("ggpubr"))
+suppressMessages(library("maftools"))
+suppressMessages(library("survival"))
+suppressMessages(library("survminer"))
+suppressMessages(library("tidyr"))
+suppressMessages(library("broom"))
+suppressMessages(library("data.table"))
+suppressMessages(library("dplyr"))
+suppressMessages(library("ggh4x"))
+suppressMessages(library("forcats"))
+suppressMessages(library("textshape"))
+suppressMessages(library("matrixStats"))
+suppressMessages(library("ggrepel"))
+suppressMessages(library("tibble"))
+suppressMessages(library("readr"))
+suppressMessages(library("ggradar"))
+suppressMessages(library("ggsci"))
+suppressMessages(library("cowplot"))
+suppressMessages(library("ggdist"))
+
+PCAWG_path <- "/Users/wchen20/Desktop/PCAWG/"
+gritic_path <- paste0(PCAWG_path, "/MHC_evolution/GRITIC/output")
+
+source("/Users/wchen20/Desktop/PCAWG/code/source/basic.R")
+source("/Users/wchen20/Desktop/PCAWG/code/source/EnrichedView_modified.R")
+source("/Users/wchen20/Desktop/PCAWG/code/source/insert_newlines.R")
+source("/Users/wchen20/Desktop/PCAWG/code/source/CRP_MAGEMSig0409.R")
+
+fread_file <- function(file) {
+    study <- basename(dirname(file))
+    df <- fread(file) %>%
+          mutate(study = study)
+    return(df)
+}
+
+colors <- c(
+  "#E41A1C", "#377EB8", "#4DAF4A", "#984EA3", "#FF7F00", "#A65628", "#F781BF",
+  "#999999", "#66C2A5", "#FC8D62", "#8DA0CB", "#E78AC3", "#A6D854", "#FFD92F",
+  "#E5C494", "#B3B3B3", "#8DD3C7", "#FFFFB3", "#BEBADA", "#FB8072", "#80B1D3",
+  "#FDB462", "#B3DE69", "#FCCDE5", "#D9D9D9", "#BC80BD", "#CCEBC5", "#FFED6F"
+)
+
+cell_labels <- c(
+  Tcells = "T-cell killing",
+  MHCregulators = "MHC-I regulation",
+  NKcells = "NK-cell killing",
+  Macrophages = "Macrophage killing",
+  GammadeltaTcells = "gdT-cell killing"
+)
+
+cell_info <- tibble::tribble(
+  ~cell_type,           ~title,                          ~color,     ~width,
+  "Tcells",             "T-cell-mediated Killing",       "#00CD66",  8,
+  "MHCregulators",      "MHC-I regulation",              "#1E90FF",  9,
+  "NKcells",            "NK-cell-mediated Killing",      "#191970",  8,
+  "Macrophages",        "Macrophage-mediated Killing",   "orange",  8,
+  "GammadeltaTcells",   "γδ T-cell-mediated Killing",    "#008B8B",  8)
+```
+
+# Source
+```{r}
+# *_all.csv: /Users/wchen20/Desktop/2026-02-16_Draft/code/Revision/workflow/2_4_CRISPR_crossvalidation_RRALeaveOut.Rmd
+```
+
+# Set path
+```{r}
+path_figure <- "/Users/wchen20/Desktop/2026-02-16_Draft/Revision_Figures/Original_output/"
+path_figure <- "/Users/wchen20/Desktop/2026-02-16_Draft/Revision_Figures/Original_output/check/"
+
+path_CRISPR <- "/Users/wchen20/Desktop/2026-02-16_Draft/Final_Results/5_CRISPR/"
+path_TopHits <- "/Users/wchen20/Desktop/2026-02-16_Draft/Final_Results/5_CRISPR/TopHits/"
+path_RRA_leaveout <- "/Users/wchen20/Desktop/2026-02-16_Draft/Final_Results/5_CRISPR/Leaveoneout/"
+path_CRISPRsum <- "/Users/wchen20/Desktop/2026-02-16_Draft/Final_Results/5_CRISPR/Summary/"
+```
+
+# SFigure 10
+```{r}
+cell_types <- c("Tcells", "MHCregulators", "NKcells")
+regulators <- c("pos", "neg")
+df_plot <- list()
+plot_bar_p <- list()
+plot_bar <- list()
+
+rename_list <- fread(paste0(path_CRISPR, "/rename_list.csv"))
+rename_list$pathway <- str_to_title(rename_list$pathway)
+
+for (cell_type in cell_types) {
+   
+   for (reg in regulators) {
+    
+    df_RRA <- fread(paste0(path_CRISPRsum, cell_type, "_C5BP_", reg, "_list.csv")) %>%
+      mutate(group = "All", study = "All")
+    final_list <- df_RRA %>% dplyr::select("ID", "Description")
+    
+    GSEA_list <- list.files(paste0(path_RRA_leaveout, cell_type), pattern = paste0("*", reg, "_all.csv"), full.names = TRUE, recursive = TRUE)
+    df_leaveout <- lapply(GSEA_list, fread_file) %>%
+      rbindlist() %>%
+      left_join(final_list, ., by = c("ID", "Description"))  %>%
+      mutate(group = "Leave-one-out")
+    
+    df_RRA_combined <- df_RRA %>%
+      left_join(., df_leaveout, by = c("ID", "Description")) %>%
+      rename_with(~ gsub("\\.x$", "_all_study", .x)) %>%
+      rename_with(~ gsub("\\.y$", "_leave_out", .x))
+    
+   # write.csv(df_RRA_combined, paste0(path_CRISPRsum, cell_type,  "_", reg, "_leaveout_each.csv"), row.names = FALSE)
+    
+    df_plot[[reg]] <- rbind(df_RRA, df_leaveout, fill = TRUE) %>%
+               mutate(log2padj = -log2(p.adjust), 
+                      regultation = reg)
+   }
+   
+  df_plot_combine <- rbindlist(df_plot) %>%
+    mutate(pathway = str_to_title(Description)) %>%
+    inner_join(rename_list, ., by = "pathway") %>%
+    arrange(desc(regultation))
+  df_plot_combine$pathway_new <- lapply(df_plot_combine$pathway_new, insert_newlines_every_five_words)
+  
+  df_plot_combine <- df_plot_combine %>% 
+    mutate(pathway_new = factor(pathway_new, levels = unique(df_plot_combine$pathway_new)),
+           log2padj = -log2(p.adjust))
+  
+  info <- cell_info %>%
+  filter(cell_type == !!cell_type)
+  
+  title <- info$title
+  color <- info$color
+  width <- info$width
+  
+  plot_bar[[cell_type]] <- ggbarplot(df_plot_combine, 
+              x = "pathway_new", 
+              y = "NES", 
+              fill = "group",
+              color = "group", 
+              add = "mean_sd",
+              position = position_dodge(0.8),
+              palette = c("#807F7F", color),
+              alpha = 0.7
+              ) +
+    geom_point(
+      aes(x = pathway_new, y = NES, shape = group, alpha = group),  # <- alpha now mapped
+      position = position_jitterdodge(jitter.width = 0.2, dodge.width = 0.8),
+      color = "black",
+      size = 1,
+      inherit.aes = FALSE
+    ) +
+    scale_shape_manual(values = c(19, 19), guide = "none") +
+    scale_alpha_manual(values = c("All" = 0, "Leave-one-out" = 1), guide = "none") + 
+      theme_classic() +
+      theme(axis.text.x      = element_text(size = 10, colour = "black", angle = 30, hjust = 1, vjust = 1),
+            axis.title.x      = element_blank(),
+            axis.text.y      = element_text(size = 10, colour = "black"),
+            legend.title = element_blank(),
+            strip.background = element_blank(),
+            strip.placement  = "outside",
+            legend.position  = "top",
+            panel.spacing    = unit(0.5, "lines"),
+            plot.margin = margin(l= 30, r = 5, t = 10, b = 10, unit = "pt"),
+            plot.title = element_text(hjust = 0.5, size = 14)) +
+  ggtitle(title)
+  
+  ggsave(plot = plot_bar[[cell_type]], filename = paste0(path_CRISPRsum, cell_type, "_each.pdf"), width = width, height = 4, units = "in")
+  
+  plot_bar_p[[cell_type]] <- ggbarplot(df_plot_combine, 
+              x = "pathway_new", 
+              y = "log2padj", 
+              fill = "group",
+              color = "group", 
+              add = "mean_sd",
+              position = position_dodge(0.8),
+              palette = c("#807F7F", color),
+              alpha = 0.7
+              ) +
+    geom_point(
+      aes(x = pathway_new, y = NES, shape = group, alpha = group),  # <- alpha now mapped
+      position = position_jitterdodge(jitter.width = 0.2, dodge.width = 0.8),
+      color = "black",
+      size = 1,
+      inherit.aes = FALSE
+    ) +
+    scale_shape_manual(values = c(19, 19), guide = "none") +
+    scale_alpha_manual(values = c("All" = 0, "Leave-one-out" = 1), guide = "none") + 
+      theme_classic() +
+      theme(axis.text.x      = element_text(size = 10, colour = "black", angle = 30, hjust = 1, vjust = 1),
+            axis.title.x      = element_blank(),
+            axis.text.y      = element_text(size = 10, colour = "black"),
+            legend.title = element_blank(),
+            strip.background = element_blank(),
+            strip.placement  = "outside",
+            legend.position  = "none",
+            panel.spacing    = unit(0.5, "lines"),
+            plot.margin = margin(l= 30, r = 5, t = 10, b = 10, unit = "pt"),
+            plot.title = element_text(hjust = 0.5, size = 14)) +
+    labs(
+    x = NULL,
+    y = "-Log2(Padj)"
+  ) +
+  #ggtitle(title) +
+  geom_hline(
+    yintercept = -log2(0.05),
+    linetype = "dashed",
+    color = "red",
+    linewidth = 0.5
+  )
+  
+  ggsave(plot = plot_bar_p[[cell_type]], filename = paste0(path_figure, cell_type, "_each_p.pdf"), width = width, height = 4, units = "in")
+  
+  plot_combined <- plot_bar[[cell_type]] / plot_bar_p[[cell_type]]
+  #ggsave(plot = plot_combined, filename = paste0(path_figure, cell_type, "_each_combined.pdf"), width = width, height = 7, units = "in")
+}
+
+plot_bar_all <- plot_bar[[2]] / plot_bar[[1]] / plot_bar[[3]]
+ggsave(plot = plot_bar_all, filename = paste0(path_figure, "SFigure8_NES_combined.pdf"), width = width, height = 12, units = "in")
+```

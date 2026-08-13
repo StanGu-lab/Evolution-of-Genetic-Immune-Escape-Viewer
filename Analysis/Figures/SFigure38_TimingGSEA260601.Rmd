@@ -1,0 +1,368 @@
+---
+title: "Figures_v17_SFigure23"
+author: "AJ"
+date: "2025-08-11"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Sfigure 19a -- Plot timing results -- PCAWG
+```{r}
+rm(list = ls())
+
+suppressMessages(library("ggplot2"))
+suppressMessages(library("patchwork"))
+suppressMessages(library("ggpubr"))
+suppressMessages(library("maftools"))
+suppressMessages(library("survival"))
+suppressMessages(library("survminer"))
+suppressMessages(library("tidyr"))
+suppressMessages(library("broom"))
+suppressMessages(library("data.table"))
+suppressMessages(library("dplyr"))
+suppressMessages(library("ggh4x"))
+suppressMessages(library("forcats"))
+suppressMessages(library("textshape"))
+suppressMessages(library("matrixStats"))
+suppressMessages(library("ggrepel"))
+suppressMessages(library("tibble"))
+suppressMessages(library("readr"))
+suppressMessages(library("ggradar"))
+suppressMessages(library("ggsci"))
+suppressMessages(library("cowplot"))
+suppressMessages(library("ggdist"))
+suppressMessages(library("openxlsx"))
+suppressMessages(library("stringr"))
+
+PCAWG_path <- "/Users/wchen20/Desktop/PCAWG/"
+gritic_path <- paste0(PCAWG_path, "/MHC_evolution/GRITIC/output")
+
+source("/Users/wchen20/Desktop/PCAWG/code/source/basic.R")
+source("/Users/wchen20/Desktop/PCAWG/code/source/EnrichedView_modified.R")
+source("/Users/wchen20/Desktop/PCAWG/code/source/insert_newlines.R")
+source("/Users/wchen20/Desktop/PCAWG/code/source/CRP_MAGEMSig0409.R")
+```
+
+# Set Path
+```{r}
+GSEA_pcawg <- "/Users/wchen20/Desktop/2026-02-16_Draft/Revision/R1Major7/GSEA/20260601/"
+save_path <- GSEA_pcawg
+```
+
+# SFigure
+```{r}
+# Tcells
+data <- read.xlsx(paste0(path_MutationTiming, "/GSEA/sig260811.xlsx"), sheet = "Tcells_new") %>% 
+         mutate(`-logFDR` = round(-log10(p.adjust), 1),
+                Timing = ifelse(NES < 0, "Higher in Early Events", "Higher in Late Events"),
+                Description = str_to_title(Description),
+                Description = sapply(Description, insert_newlines_every_five_words4), Description,
+                `NES(abs)` = abs(NES))
+
+title = "Head-SCC - Necroptosis"
+enrichment <- data %>% filter(Group == "Tcells_pos_Necroptosis (Tcells)_Timing_PathwayC5BPpos_sig_Head-SCC") %>% 
+  arrange(Timing, abs(`-logFDR`))
+
+enrichment_order <- enrichment %>% pull(Description) %>% unique()
+enrichment <- enrichment %>% mutate(Description = factor(Description, levels = enrichment_order))
+
+x_max <- round(max(abs(enrichment$`-logFDR`)), 0)
+
+p1 <- ggplot(data=enrichment, aes_string(x = "`-logFDR`", y = "Description", size = "abs(NES)")) + 
+  geom_point(aes(color = Timing)) +
+  scale_color_manual(
+    values = color_timing2,
+    guide = guide_legend(order = 1)
+  ) +
+  scale_size_continuous(
+    range = c(3, 5),
+    guide = guide_legend(order = 2)
+  ) +
+  theme(panel.background = element_blank(),
+        legend.position = "right",
+        legend.key = element_rect(fill = "transparent", colour = "transparent"),
+        plot.title = element_text(hjust = 0.5, size = 16, face = "plain"),
+        axis.text.x = element_text(colour = "black"),
+        axis.text.y = element_text(colour = "black", size = 12),
+        axis.line = element_line(color = "black"),
+        axis.ticks = element_line(color = "black"))  +
+  labs(x = "-log2FDR", y = "", size = "NES") +
+  scale_x_continuous(limits = c(0, x_max + 1)) +
+  ggtitle(title)
+
+p1
+ggsave(filename =  paste0(path_figure, title, ".pdf"), plot = p1, width = 6, height = 5, units = "in")
+
+##
+title = "Skin-Melanoma - Autophagy"
+enrichment <- data %>% filter(Group == "Tcells_neg_Autophagy (Tcells)_Timing_PathwayC5BPneg_sig_Skin-Melanoma") %>% 
+  arrange(Timing, abs(`-logFDR`))
+
+enrichment_order <- enrichment %>% pull(Description) %>% unique()
+enrichment <- enrichment %>% mutate(Description = factor(Description, levels = enrichment_order))
+
+x_max <- round(max(abs(enrichment$`-logFDR`)), 0)
+
+p2 <- ggplot(data=enrichment, aes_string(x = "`-logFDR`", y = "Description", size = "abs(NES)")) + 
+  geom_point(aes(color = Timing)) +
+  scale_color_manual(
+    values = color_timing2,
+    guide = guide_legend(order = 1)
+  ) +
+  scale_size_continuous(
+    range = c(3, 5),
+    guide = guide_legend(order = 2)
+  ) +
+  theme(panel.background = element_blank(),
+        legend.position = "right",
+        legend.key = element_rect(fill = "transparent", colour = "transparent"),
+        plot.title = element_text(hjust = 0.5, size = 16, face = "plain"),
+        axis.text.x = element_text(colour = "black"),
+        axis.text.y = element_text(colour = "black", size = 12),
+        axis.line = element_line(color = "black"),
+        axis.ticks = element_line(color = "black"))  +
+  labs(x = "-log2FDR", y = "", size = "NES") +
+  scale_x_continuous(limits = c(0, x_max + 1)) +
+  ggtitle(title) 
+
+p2
+ggsave(filename =  paste0(path_figure, title, ".pdf"), plot = p1, width = 6, height = 5, units = "in")
+
+
+## ColoRect-AdenoCA - Apoptotic Signaling Pathway
+title = "ColoRect-AdenoCA - Apoptotic Signaling Pathway"
+enrichment <- data %>% filter(Group == "Tcells_neg_Apoptotic Signaling Pathway_Timing_PathwayC5BPpos_sig_ColoRect-AdenoCA") %>%
+  arrange(Timing, abs(`-logFDR`))
+
+enrichment_order <- enrichment %>% pull(Description) %>% unique()
+enrichment <- enrichment %>% mutate(Description = factor(Description, levels = enrichment_order))
+
+x_max <- round(max(abs(enrichment$`-logFDR`), 0))
+
+p3 <- ggplot(data=enrichment, aes_string(x = "`-logFDR`", y = "Description", size = "abs(NES)")) + 
+  geom_point(aes(color = Timing)) +
+  scale_color_manual(
+    values = color_timing2,
+    guide = guide_legend(order = 1)
+  ) +
+  scale_size_continuous(
+    range = c(3, 5),
+    guide = guide_legend(order = 2)
+  ) +
+  theme(panel.background = element_blank(),
+        legend.position = "right",
+        legend.key = element_rect(fill = "transparent", colour = "transparent"),
+        plot.title = element_text(hjust = 0.5, size = 16, face = "plain"),
+        axis.text.x = element_text(colour = "black"),
+        axis.text.y = element_text(colour = "black", size = 12),
+        axis.line = element_line(color = "black"),
+        axis.ticks = element_line(color = "black"))  +
+  labs(x = "-log2FDR", y = "", size = "NES") +
+  scale_x_continuous(limits = c(2, x_max + 1)) +
+  ggtitle(title) 
+
+p3
+ggsave(filename =  paste0(path_figure, title, ".pdf"), plot = p2, width = 6, height = 5, units = "in")
+
+## Skin-Melanoma - Apoptotic Signaling Pathway
+title = "Skin-Melanoma - Apoptotic Signaling Pathway"
+enrichment <- data %>% filter(Group == "Tcells_neg_Apoptotic Signaling Pathway_Timing_PathwayC5BPpos_sig_Skin-Melanoma") %>% 
+  arrange(Timing, abs(`-logFDR`))
+
+enrichment_order <- enrichment %>% pull(Description) %>% unique()
+enrichment <- enrichment %>% mutate(Description = factor(Description, levels = enrichment_order))
+x_max <- round(max(abs(enrichment$`-logFDR`), 0))
+
+p4 <- ggplot(data=enrichment, aes_string(x = "`-logFDR`", y = "Description", size = "abs(NES)")) + 
+  geom_point(aes(color = Timing)) +
+  scale_color_manual(
+    values = color_timing2,
+    guide = guide_legend(order = 1)
+  ) +
+  scale_size_continuous(
+    range = c(3, 5),
+    guide = guide_legend(order = 2)
+  ) +
+  theme(panel.background = element_blank(),
+        legend.position = "right",
+        legend.key = element_rect(fill = "transparent", colour = "transparent"),
+        plot.title = element_text(hjust = 0.5, size = 16, face = "plain"),
+        axis.text.x = element_text(colour = "black"),
+        axis.text.y = element_text(colour = "black", size = 12),
+        axis.line = element_line(color = "black"),
+        axis.ticks = element_line(color = "black"))  +
+  labs(x = "-log2FDR", y = "", size = "NES") +
+  scale_x_continuous(limits = c(0, x_max + 1)) +
+  ggtitle(title) 
+
+p4
+ggsave(filename =  paste0(path_figure, title, ".pdf"), plot = p3, width = 6, height = 5, units = "in")
+
+
+## Response to Cytokine Stimulus_Timing_Melanoma
+title = "Skin-Melanoma - Response to Cytokine Stimulus"
+enrichment <- data %>% filter(Group == "Tcells_neg_Response to Cytokine Stimulus_Timing_PathwayC5BPpos_sig_Skin-Melanoma") %>%
+  arrange(Timing, abs(`-logFDR`))
+
+enrichment_order <- enrichment %>% pull(Description) %>% unique()
+enrichment <- enrichment %>% mutate(Description = factor(Description, levels = enrichment_order))
+
+x_max <- round(max(abs(enrichment$`-logFDR`), 0))
+
+p5 <- ggplot(data=enrichment, aes_string(x = "`-logFDR`", y = "Description", size = "abs(NES)")) + 
+  geom_point(aes(color = Timing)) +
+  scale_color_manual(
+    values = color_timing2,
+    guide = guide_legend(order = 1)
+  ) +
+  scale_size_continuous(
+    range = c(3, 5),
+    guide = guide_legend(order = 2)
+  ) +
+  theme(panel.background = element_blank(),
+        legend.position = "right",
+        legend.key = element_rect(fill = "transparent", colour = "transparent"),
+        plot.title = element_text(hjust = 0.5, size = 16, face = "plain"),
+        axis.text.x = element_text(colour = "black"),
+        axis.text.y = element_text(colour = "black", size = 12),
+        axis.line = element_line(color = "black"),
+        axis.ticks = element_line(color = "black")) +
+  labs(x = "-log2FDR", y = "", size = "NES") +
+  scale_x_continuous(limits = c(0, x_max + 1)) +
+  ggtitle(title) 
+
+p5
+ggsave(filename =  paste0(path_figure, title, ".pdf"), plot = p5, width = 6, height = 5, units = "in")
+
+## Liver-HCC - Cellular Amino Acid Metabolic Process
+data <- read.xlsx(paste0(path_MutationTiming, "/GSEA/sig260811.xlsx"), sheet = "GammadeltaTcells_new")
+
+title = "Liver-HCC - Cellular Amino Acid Metabolic Process"
+enrichment <- data %>% filter(Group == "GammadeltaTcells_neg_Cellular Amino Acid Metabolic Process_Timing_PathwayC5BPneg_sig_Liver-HCC"|Group =="GammadeltaTcells_neg_Cellular Amino Acid Metabolic Process_Timing_PathwayC5BPpos_sig_Liver-HCC") %>% 
+                       mutate(`-logFDR` = round(-log10(p.adjust), 1),
+                              Timing = ifelse(NES < 0, "Higher in Early Events", "Higher in Late Events"),
+                              Description = str_to_title(Description),
+                              Description = sapply(Description, insert_newlines_every_five_words4), Description,
+                              `NES(abs)` = abs(NES)) %>% 
+  arrange(Timing, abs(`-logFDR`))
+
+enrichment_order <- enrichment %>% pull(Description) %>% unique()
+enrichment <- enrichment %>% mutate(Description = factor(Description, levels = enrichment_order))
+
+x_max <- round(max(abs(enrichment$`-logFDR`), 0))
+
+p6 <- ggplot(data=enrichment, aes_string(x = "`-logFDR`", y = "Description", size = "abs(NES)")) + 
+  geom_point(aes(color = Timing)) +
+  scale_color_manual(
+    values = color_timing2,
+    guide = guide_legend(order = 1)
+  ) +
+  scale_size_continuous(
+    range = c(3, 5),
+    guide = guide_legend(order = 2)
+  ) +
+  theme(panel.background = element_blank(),
+        legend.position = "right",
+        legend.key = element_rect(fill = "transparent", colour = "transparent"),
+        plot.title = element_text(hjust = 0.5, size = 16, face = "plain"),
+        axis.text.x = element_text(colour = "black"),
+        axis.text.y = element_text(colour = "black", size = 12),
+        axis.line = element_line(color = "black"),
+        axis.ticks = element_line(color = "black"))  +
+  labs(x = "-log2FDR", y = "", size = "NES") +
+  scale_x_continuous(limits = c(0, x_max + 1)) +
+  ggtitle(title) 
+
+p6
+ggsave(filename =  paste0(path_figure, title, ".pdf"), plot = p6, width = 6, height = 5, units = "in")
+
+
+## Kidney-RCC - REG GR Pathway
+data <- read.xlsx(paste0(path_MutationTiming, "/GSEA/sig260811.xlsx"), sheet = "Macrophages_new")
+
+title = "Kidney-RCC - REG GR Pathway"
+enrichment <- data %>% filter(Group == "Macrophages_pos_REG GR Pathway_Timing_PathwayC5BPneg_sig_Kidney-RCC") %>% 
+                       mutate(`-logFDR` = round(-log10(p.adjust), 1),
+                              Timing = ifelse(NES < 0, "Higher in Early Events", "Higher in Late Events"),
+                              Description = str_to_title(Description),
+                              Description = sapply(Description, insert_newlines_every_five_words4), Description,
+                              `NES(abs)` = abs(NES)) %>% 
+  arrange(Timing, abs(`-logFDR`))
+
+enrichment_order <- enrichment %>% pull(Description) %>% unique()
+enrichment <- enrichment %>% mutate(Description = factor(Description, levels = enrichment_order))
+
+x_max <- round(max(abs(enrichment$`-logFDR`), 0))
+
+p7 <- ggplot(data=enrichment, aes_string(x = "`-logFDR`", y = "Description", size = "abs(NES)")) + 
+  geom_point(aes(color = Timing)) +
+  scale_color_manual(
+    values = color_timing2,
+    guide = guide_legend(order = 1)
+  ) +
+  scale_size_continuous(
+    range = c(3, 5),
+    guide = guide_legend(order = 2)
+  ) +
+  theme(panel.background = element_blank(),
+        legend.position = "right",
+        legend.key = element_rect(fill = "transparent", colour = "transparent"),
+        plot.title = element_text(hjust = 0.5, size = 16, face = "plain"),
+        axis.text.x = element_text(colour = "black"),
+        axis.text.y = element_text(colour = "black", size = 12),
+        axis.line = element_line(color = "black"),
+        axis.ticks = element_line(color = "black"))  +
+  labs(x = "-log2FDR", y = "", size = "NES") +
+  scale_x_continuous(limits = c(0, x_max + 1)) +
+  ggtitle(title) 
+
+p7
+ggsave(filename =  paste0(path_figure, title, ".pdf"), plot = p7, width = 6, height = 5, units = "in")
+
+
+title = "Skin-Melanoma - SWI/SNF Pathway"
+enrichment <- data %>% filter(Group == "Macrophages_pos_SWI SNF Pathway_Timing_PathwayC5BPneg_sig_Skin-Melanoma") %>% 
+                       mutate(`-logFDR` = round(-log10(p.adjust), 1),
+                              Timing = ifelse(NES < 0, "Higher in Early Events", "Higher in Late Events"),
+                              Description = str_to_title(Description),
+                              Description = sapply(Description, insert_newlines_every_five_words4), Description,
+                              `NES(abs)` = abs(NES)) %>% 
+  arrange(Timing, abs(`-logFDR`))
+
+enrichment_order <- enrichment %>% pull(Description) %>% unique()
+enrichment <- enrichment %>% mutate(Description = factor(Description, levels = enrichment_order))
+
+x_max <- round(max(abs(enrichment$`-logFDR`), 0))
+
+p8 <- ggplot(data=enrichment, aes_string(x = "`-logFDR`", y = "Description", size = "abs(NES)")) + 
+  geom_point(aes(color = Timing)) +
+  scale_color_manual(
+    values = color_timing2,
+    guide = guide_legend(order = 1)
+  ) +
+  scale_size_continuous(
+    range = c(3, 5),
+    guide = guide_legend(order = 2)
+  ) +
+  theme(panel.background = element_blank(),
+        legend.position = "right",
+        legend.key = element_rect(fill = "transparent", colour = "transparent"),
+        plot.title = element_text(hjust = 0.5, size = 16, face = "plain"),
+        axis.text.x = element_text(colour = "black"),
+        axis.text.y = element_text(colour = "black", size = 12),
+        axis.line = element_line(color = "black"),
+        axis.ticks = element_line(color = "black"))  +
+  labs(x = "-log2FDR", y = "", size = "NES") +
+  scale_x_continuous(limits = c(0, x_max + 1)) +
+  ggtitle(title) 
+
+p8
+ggsave(filename =  paste0(path_figure, title, ".pdf"), plot = p8, width = 6, height = 5, units = "in")
+
+plot <- p1 + p2 + p3 + p4 + p5 + p6 + p7 + p8 + plot_layout(nrow = 4)
+
+ggsave(filename = paste0(path_figure, "SFigure38.pdf"), plot = plot, width = 14, height = 17, units = "in")
+```

@@ -33,20 +33,9 @@ suppressMessages(library("ggsci"))
 suppressMessages(library("cowplot"))
 suppressMessages(library("ggdist"))
 
-PCAWG_path <- "/Users/wchen20/Desktop/PCAWG/"
+PCAWG_path <- "~/Desktop/PCAWG/"
 source(paste0(PCAWG_path, "/code/source/basic.R"))
 source(paste0(PCAWG_path, "/code/source/oncoplot2.R"))
-```
-
-
-# Set path
-```{r}
-path_figure <- "/Users/wchen20/Desktop/2026-02-16_Draft/Revision_Figures/Original_output/"
-
-path_HLAmutations <- "/Users/wchen20/Desktop/2026-02-16_Draft/Final_Results/1_APM/1_HLAmutations/"
-path_HLALOH <- "/Users/wchen20/Desktop/2026-02-16_Draft/Final_Results/1_APM/2_HLALOH/"
-path_HomoDeletion <- "/Users/wchen20/Desktop/2026-02-16_Draft/Final_Results/1_APM/3_HomozygousDeletion/"
-path_APMall <- "/Users/wchen20/Desktop/2026-02-16_Draft/Final_Results/1_APM/4_APMall/"
 ```
 
 # 1. Common cancer types
@@ -61,7 +50,7 @@ hlaloh <- as.data.frame(mat1) %>%
   filter(Status != "") %>%
   mutate(APM_Event = "APM-Mutant") %>% filter(Gene %in% c("HLALOH")) %>%
   mutate(Gene = "Any",
-         HLALOH = "Mut") %>%
+         HLALOH = "Mutant") %>%
   inner_join(LOH_MSS, ., by = "aliquot_id") %>% filter(aliquot_id %in% sample_MSS)
 type_hlaloh <- unique(hlaloh$histology_abbreviation)
 
@@ -70,10 +59,11 @@ long_df <- as.data.frame(mat1) %>%
   pivot_longer(-Gene, names_to = "aliquot_id", values_to = "Status") %>%
   filter(Status != "") %>%
   mutate(APM_Event = "APM-Mutant") %>% filter(Gene %in% c("HLA-A", "HLA-B", "HLA-C")) %>%
-  distinct(aliquot_id, .keep_all = T) %>% dplyr::select("aliquot_id", "APM_Event")
+  distinct(aliquot_id, .keep_all = T) %>% 
+  dplyr::select("aliquot_id", "APM_Event")
 
 HLA_mut <- long_df %>% inner_join(LOH_MSS, ., by = "aliquot_id") %>% 
-  mutate(HLA_mutation = ifelse(is.na(APM_Event), "WT", "Mut"),
+  mutate(HLA_mutation = ifelse(is.na(APM_Event), "WT", "Mutant"),
          count = 1)
 
 type_hlamut <- unique(HLA_mut$histology_abbreviation)
@@ -82,6 +72,8 @@ type_all <- c(type_hlaloh, type_hlamut) %>% unique()
 
 # SFigure 1b -- Plot for HLA mutations
 ```{r}
+color_event = c("Mutant" = "#E64B35FF", "WT"  = "#4DBBD5FF" )
+
 mat1 <- fread(paste0(path_APMall, "/onco_APM_hlaloh.txt")) %>% 
   column_to_rownames("V1") %>% 
   as.matrix()
@@ -98,7 +90,7 @@ long_df <- as.data.frame(mat1) %>%
 ## SFigure 1b
 # HLA point mutations
 HLA_mut <- long_df %>% left_join(LOH_MSS, ., by = "aliquot_id") %>% 
-  mutate(HLA_mutation = ifelse(is.na(APM_Event), "WT", "Mut"),
+  mutate(HLA_mutation = ifelse(is.na(APM_Event), "WT", "Mutant"),
          count = 1)
 
 PCAWG_HLAmut <- HLA_mut %>%
@@ -113,7 +105,7 @@ PCAWG_HLAmut_all <- PCAWG_HLAmut %>%
   left_join(PCAWG_HLAmut, ., by = "histology_abbreviation") %>%
   mutate(Pro = Total/Total_all) %>% 
   mutate(type = paste0(histology_abbreviation, " (n = ", Total_all, ")"),
-         HLA_mutation = factor(HLA_mutation, levels = c("WT", "Mut"))) %>% 
+         HLA_mutation = factor(HLA_mutation, levels = c("WT", "Mutant"))) %>% 
   filter(histology_abbreviation %in% type_all)
 
 HLAmutation_freq <- ggplot(PCAWG_HLAmut_all, aes(x = type, y = Pro, fill = HLA_mutation)) +
@@ -136,7 +128,7 @@ HLAmutation_freq <- ggplot(PCAWG_HLAmut_all, aes(x = type, y = Pro, fill = HLA_m
     legend.position = "right") +
   geom_hline(yintercept = 0.5, linetype = "dashed", color = "black", size = 0.5)
 
-ggsave(filename = paste0(path_figure, "/SFigure1b1.pdf"), plot = HLAmutation_freq, width = 10, height = 5, units = "in")
+ggsave(filename = paste0(path_figure, "/SFigure2b1.pdf"), plot = HLAmutation_freq, width = 10, height = 5, units = "in")
 ```
 
 # SFigure 1b -- Plot for HLA LOH
@@ -151,9 +143,9 @@ hlaloh <- as.data.frame(mat1) %>%
   filter(Status != "") %>%
   mutate(APM_Event = "APM-Mutant") %>% filter(Gene %in% c("HLALOH")) %>%
   mutate(Gene = "Any",
-         HLALOH = "Mut") %>%
+         HLALOH = "Mutant") %>%
   left_join(LOH_MSS, ., by = "aliquot_id") %>%
-  mutate(HLA_LOH = ifelse(is.na(HLALOH), "WT", "Mut")) %>%
+  mutate(HLA_LOH = ifelse(is.na(HLALOH), "WT", "Mutant")) %>%
   mutate(count = 1) %>% 
   filter(aliquot_id %in% sample_MSS)
 
@@ -171,7 +163,7 @@ PCAWG_LOH <- PCAWG_HLALOH %>%
   left_join(PCAWG_HLALOH, ., by = "histology_abbreviation") %>%
   mutate(Pro = Total/Total_all) %>% 
   mutate(type = paste0(histology_abbreviation, " (n = ", Total_all, ")"),
-         HLA_LOH = factor(HLA_LOH, levels = c("WT", "Mut")))  %>% 
+         HLA_LOH = factor(HLA_LOH, levels = c("WT", "Mutant")))  %>% 
   filter(histology_abbreviation %in% type_all)
 
 HLALOH_freq <- ggplot(PCAWG_LOH, aes(x = type, y = Pro, fill = HLA_LOH)) +
@@ -195,9 +187,9 @@ HLALOH_freq <- ggplot(PCAWG_LOH, aes(x = type, y = Pro, fill = HLA_LOH)) +
     geom_hline(yintercept = 0.5, linetype = "dashed", color = "black", size = 0.5)
 
 HLALOH_freq
-ggsave(filename = paste0(path_figure, "/SFigureb2.pdf"), plot = HLALOH_freq, width = 10, height = 5, units = "in")
+ggsave(filename = paste0(path_figure, "/SFigure2b2.pdf"), plot = HLALOH_freq, width = 10, height = 5, units = "in")
 
 # Combine the plots with shared axis
 APM_plot <- HLAmutation_freq + HLALOH_freq  + patchwork::plot_layout(nrow = 2)
-ggsave(filename = paste0(path_figure, "/SFigure1b.pdf"), plot = APM_plot, width = 15, height = 10, units = "in")
+ggsave(filename = paste0(path_figure, "/SFigure2b.pdf"), plot = APM_plot, width = 15, height = 10, units = "in")
 ```

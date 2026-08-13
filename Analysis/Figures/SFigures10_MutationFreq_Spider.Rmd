@@ -46,23 +46,8 @@ source("/Users/wchen20/Desktop/PCAWG/code/source/insert_newlines.R")
 source("/Users/wchen20/Desktop/PCAWG/code/source/CRP_MAGEMSig0409.R")
 ```
 
-# Source
+# Figure 2B
 ```{r}
-# *_Freq_oncoMSS.csv: /Users/wchen20/Desktop/2026-02-16_Draft/code/Revision/workflow/3_1_CRISPR_MutationFreq.Rmd
-```
-
-# Set Path
-```{r}
-path_figure <- "/Users/wchen20/Desktop/2026-02-16_Draft/Revision_Figures/Original_output/"
-path_figure <- "/Users/wchen20/Desktop/2026-02-16_Draft/Revision_Figures/Original_output/check/"
-
-path_MutationFreq <- "/Users/wchen20/Desktop/2026-02-16_Draft/Final_Results/6_MutationFreq/"
-```
-
-# Figure 2B -- results generated from /Users/wchen20/Desktop/2026-02-16_Draft/code/Revision/workflow/3_2_3_CRISPR_MutationFreq.Rmd
-```{r}
-rename_list <- fread("/Users/wchen20/Desktop/PCAWG/CRISPR/CRISPRscreen20240118/rename_list.csv")
-
 cell_types <- c("Tcells", "MHCregulators", "NKcells", "Macrophages", "GammadeltaTcells")
 regulators <- c("neg", "pos")
 plot_radar <- list()

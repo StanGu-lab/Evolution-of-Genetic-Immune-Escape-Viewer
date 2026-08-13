@@ -75,19 +75,6 @@ wrap_hanging <- function(label,
 }
 ```
 
-# Source
-```{r}
-# *log_odds.tsv: /Users/wchen20/Desktop/2026-02-16_Draft/code/Revision/workflow/4_2_TimingFinal.Rmd
-```
-
-# Set Path
-```{r}
-path_figure <- "/Users/wchen20/Desktop/2026-02-16_Draft/Revision_Figures/Original_output/"
-path_figure <- "/Users/wchen20/Desktop/2026-02-16_Draft/Revision_Figures/Original_output/check/"
-
-path_MutationTiming <- "/Users/wchen20/Desktop/2026-02-16_Draft/Final_Results/8_MutationTiming/"
-```
-
 # Make phylogicDNT plot
 ```{r}
 driver_gene <- na.omit(driver_gene)

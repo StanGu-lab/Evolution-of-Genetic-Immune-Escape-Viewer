@@ -33,48 +33,14 @@ suppressMessages(library("ggsci"))
 suppressMessages(library("cowplot"))
 suppressMessages(library("ggdist"))
 
-PCAWG_path <- "/Users/wchen20/Desktop/PCAWG/"
+PCAWG_path <- "~/Desktop/PCAWG/"
 source(paste0(PCAWG_path, "/code/source/basic.R"))
 source(paste0(PCAWG_path, "/code/source/oncoplot2.R"))
-
-rename_list <- fread(".../Project/CRISPR/CRISPRscreen20240118/rename_list.csv")
-rename_list$pathway <- str_to_title(rename_list$pathway)
 ```
 
-# Set path
+# 1. Make plots
 ```{r}
-path_figure <- "/Users/wchen20/Desktop/2026-02-16_Draft/Revision_Figures/Original_output/"
-
-path_dNdScv <- "/Users/wchen20/Desktop/2026-02-16_Draft/Final_Results/4_dNdS_APM/"
-```
-
-# 3. Combine 
-```{r}
-file_list <- list.files(path = path_dNdScv, pattern = "globaldnds_*", recursive = FALSE, full.names = TRUE)
-
-dNdScv <- list()
-
-for (file in file_list) {
-  file_name <- basename(file)
-  type <- basename(file_name)
-  type <- gsub("globaldnds_|_APM.csv", "", type)
-  dNdScv[[type]] <- fread(file) %>% mutate(type = type)
-}
-
-dnds_all <- rbindlist(dNdScv, fill = TRUE) %>% 
-  mutate(log_mle = log2(mle),
-         log_cihigh = log2(cihigh),
-         log_cilow = log2(cilow),
-         MLE = pmin(pmax(log_mle, -4), 4),
-         upper = pmin(pmax(log_cihigh, -4.5), 4.5),
-         lower = pmin(pmax(log_cilow, -4.5), 4.5)) %>%
-  select(-log_mle, -log_cihigh, -log_cilow)
-write_csv(dnds_all, file = paste0(path_dNdScv, "/all.csv"))
-```
-
-# 4. Make plots
-```{r}
-dnds_all <- fread(paste0(path_dNdScv, "/all.csv"))
+dnds_all <- fread(paste0(path_dNdScvAPM, "/all.csv"))
 
 dNdScv_plot <- ggplot(dnds_all, aes(x = type, y = MLE, ymax = upper, ymin = lower, group = name, color = name)) +
   geom_linerange(position = position_dodge(width = 0.5), color = "#A5A4A4") +
@@ -98,5 +64,5 @@ dNdScv_plot <- ggplot(dnds_all, aes(x = type, y = MLE, ymax = upper, ymin = lowe
         legend.title = element_text(size = 8), 
         legend.text = element_text(size = 8))
 
-ggsave(filename = paste0(path_figure, "/SFigure2E.pdf"), plot = dNdScv_plot, width = 10, height = 3, units = "in")
+ggsave(filename = paste0(path_figure, "/SFigure2D.pdf"), plot = dNdScv_plot, width = 10, height = 3, units = "in")
 ```

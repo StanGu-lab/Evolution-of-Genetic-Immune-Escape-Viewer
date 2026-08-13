@@ -34,24 +34,14 @@ suppressMessages(library("cowplot"))
 suppressMessages(library("ggdist"))
 suppressMessages(library("openxlsx"))
 
-PCAWG_path <- "/Users/wchen20/Desktop/PCAWG/"
+PCAWG_path <- "~/Desktop/PCAWG/"
 source(paste0(PCAWG_path, "/code/source/basic.R"))
 source(paste0(PCAWG_path, "/code/source/oncoplot2.R"))
 ```
 
-# Set path
-```{r}
-path_figure <- "/Users/wchen20/Desktop/2026-02-16_Draft/Revision_Figures/Original_output/"
-
-path_HLAmutations <- "/Users/wchen20/Desktop/2026-02-16_Draft/Final_Results/1_APM/1_HLAmutations/"
-path_HLALOH <- "/Users/wchen20/Desktop/2026-02-16_Draft/Final_Results/1_APM/2_HLALOH/"
-path_HomoDeletion <- "/Users/wchen20/Desktop/2026-02-16_Draft/Final_Results/1_APM/3_HomozygousDeletion/"
-path_APMall <- "/Users/wchen20/Desktop/2026-02-16_Draft/Final_Results/1_APM/4_APMall/"
-```
-
 # Expected call rates
 ```{r}
-donor_clinical <- read.xlsx("/Users/wchen20/Desktop/PCAWG/donors_and_biospecimens/pcawg_donor_clinical_August2016_v9.xlsx", sheet = "pcawg_donor_clinical_August2016") %>% 
+donor_clinical <- read.xlsx(paste0(path_APMall, "/pcawg_donor_clinical_August2016_v9.xlsx"), sheet = "pcawg_donor_clinical_August2016") %>% 
   filter(donor_wgs_included_excluded != "Excluded") %>% dplyr::select(icgc_donor_id, donor_unique_id)
 
 df_HLALOH <- fread(paste0(path_HLALOH, "/df_HLALOH.csv")) %>% 
@@ -59,7 +49,7 @@ df_HLALOH <- fread(paste0(path_HLALOH, "/df_HLALOH.csv")) %>%
   mutate(aliquot_id = sample_id) %>%
   dplyr::select("aliquot_id", "HLALOH")
 
-LOH_MSI <- fread("/Users/wchen20/Desktop/PCAWG/donors_and_biospecimens/LOH_MSI_final.csv") %>% 
+LOH_MSI <- fread(paste0(path_APMall, "/LOH_MSI_final_B.csv")) %>% 
   inner_join(donor_clinical, ., by = "donor_unique_id") %>%
   left_join(., df_HLALOH, by = "aliquot_id") %>% 
   dplyr::select(icgc_donor_id, histology_abbreviation, HLALOH)
@@ -118,7 +108,7 @@ plot_tab <- ggplot(tab, aes(x = HLALOH, y = loh_lilac, fill = consistency)) +
     panel.grid = element_blank()
   )
 
-ggsave(paste0(path_figure, "/SFigure2D1_lohtable.pdf"), plot = plot_tab, width = 4, height = 4)
+ggsave(paste0(path_figure, "/SFigure2C1_lohtable.pdf"), plot = plot_tab, width = 4, height = 4)
 
 plot_loh <- ggplot(df_plot,
                    aes(x = histology_abbreviation, y = n, fill = status)) +
@@ -132,7 +122,7 @@ plot_loh <- ggplot(df_plot,
   ) +
   theme_minimal() +
   theme(
-    strip.text = element_text(size = 14, face = "bold"),
+    strip.text = element_text(size = 14),
     axis.text.x = element_text(angle = 45, hjust = 1, vjust = 1,
                                size = 12, colour = "black"),
     axis.text.y = element_text(size = 12, colour = "black"),
@@ -146,5 +136,5 @@ plot_loh <- ggplot(df_plot,
 
 plot_loh
 
-ggsave(filename = paste0(path_figure, "/SFigure2D2_Expected_callrate.pdf"), plot = plot_loh, width = 12, height = 6, units = "in")
+ggsave(filename = paste0(path_figure, "/SFigure2C2_Expected_callrate.pdf"), plot = plot_loh, width = 12, height = 6, units = "in")
 ```

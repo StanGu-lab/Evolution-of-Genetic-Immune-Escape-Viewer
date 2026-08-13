@@ -9,7 +9,7 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-# 0. Load packacges
+# 0. Load packages
 ```{r}
 rm(list = ls())
 
@@ -36,13 +36,12 @@ library("ggtext")
 library("stringr")
 
 ## Path
-PCAWG_path <- "/rsrch6/scratch/hema_bio-Malignan/wchen20/PCAWG"
-PCAWG_path <- "/Users/wchen20/Desktop/PCAWG"
+PCAWG_path <- "~/Desktop/PCAWG"
 gritic_path <- paste0(PCAWG_path, "/MHC_evolution/GRITIC/output")
 
-source("/Users/wchen20/Desktop/PCAWG/code/source/basic.R")
-source("/Users/wchen20/Desktop/PCAWG/code/source/insert_newlines.R")
-source("/Users/wchen20/Desktop/PCAWG/code/source/plot_segTiming.R")
+source("~/Desktop/PCAWG/code/source/basic.R")
+source("~/Desktop/PCAWG/code/source/insert_newlines.R")
+source("~/Desktop/PCAWG/code/source/plot_segTiming.R")
 
 wrap_hanging <- function(label,
                          width = 24,
@@ -73,19 +72,6 @@ wrap_hanging <- function(label,
 
   txt
 }
-```
-
-# Source
-```{r}
-# *log_odds.tsv: /Users/wchen20/Desktop/2026-02-16_Draft/code/Revision/workflow/4_2_TimingFinal.Rmd
-```
-
-# Set Path
-```{r}
-path_figure <- "/Users/wchen20/Desktop/2026-02-16_Draft/Revision_Figures/Original_output/"
-path_figure <- "/Users/wchen20/Desktop/2026-02-16_Draft/Revision_Figures/Original_output/check/"
-
-path_MutationTiming <- "/Users/wchen20/Desktop/2026-02-16_Draft/Final_Results/8_MutationTiming/"
 ```
 
 # Make phylogicDNT plot
@@ -347,7 +333,7 @@ CRC_robust <- wrap_plots(
 )
 
 ggsave(
-  filename ="/Users/wchen20/Desktop/2026-02-16_Draft/Revision/R1Major5/ColoRect-AdenoCA_robust.pdf",
+  filename ="~/Desktop/2026-02-16_Draft/Revision/R1Major5/ColoRect-AdenoCA_robust.pdf",
   plot = CRC_robust,
   width = 18, height = 6, units = "in")
 
@@ -361,7 +347,7 @@ SFigure_hlaloh <- wrap_plots(
 )
 
 ggsave(
-  filename ="/Users/wchen20/Desktop/2026-02-16_Draft/Revision/R1Major5/Subsampling.pdf",
+  filename ="~/Desktop/2026-02-16_Draft/Revision/R1Major5/Subsampling.pdf",
   plot = SFigure_hlaloh,
   width = 18, height = 6, units = "in")
 
@@ -375,7 +361,7 @@ CRC_robust <- wrap_plots(
 )
 
 ggsave(
-  filename ="/Users/wchen20/Desktop/2026-02-16_Draft/Revision/R1Major5/ColoRect-AdenoCA_significance.pdf",
+  filename ="~/Desktop/2026-02-16_Draft/Revision/R1Major5/ColoRect-AdenoCA_significance.pdf",
   plot = CRC_robust,
   width = 18, height = 6, units = "in")
 
@@ -389,7 +375,7 @@ Figure5 <- wrap_plots(
 )
 
 ggsave(
-  filename ="/Users/wchen20/Desktop/2026-02-16_Draft/Revision/R1Major5/ColoRect-AdenoCA_significance.pdf",
+  filename ="~/Desktop/2026-02-16_Draft/Revision/R1Major5/ColoRect-AdenoCA_significance.pdf",
   plot = CRC_robust,
   width = 16, height = 6, units = "in")
 
@@ -403,7 +389,7 @@ SFigure_hlaloh <- wrap_plots(
 )
 
 ggsave(
-  filename ="/Users/wchen20/Desktop/2026-02-16_Draft/Revision_Figures/Original_output/SFigures/HLALOH.pdf",
+  filename ="~/Desktop/2026-02-16_Draft/Revision_Figures/Original_output/SFigures/HLALOH.pdf",
   plot = SFigure_hlaloh,
   width = 18, height = 6, units = "in")
 ```

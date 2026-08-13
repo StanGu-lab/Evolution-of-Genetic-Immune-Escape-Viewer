@@ -21,38 +21,13 @@ library("tidyr")
 library("stringr")
 library("ggplot2")
 
-PCAWG_path <- "/rsrch6/scratch/hema_bio-Malignan/wchen20/PCAWG"
-PCAWG_path <- "/Users/wchen20/Desktop/PCAWG"
+PCAWG_path <- "~/Desktop/PCAWG"
 
-source("/Users/wchen20/Desktop/PCAWG/code/source/basic.R")
-source("/Users/wchen20/Desktop/PCAWG/code/source/plot_dnnsall.R")
+source("~/Desktop/PCAWG/code/source/basic.R")
+source("~/Desktop/PCAWG/code/source/plot_dnnsall.R")
 ```
 
-# Source
-```{r}
-# /Users/wchen20/Desktop/2026-02-16_Draft/code/Revision/workflow/1_0_VCF2MAF.md
-# maf_pcawg_oncoKB.maf: /Users/wchen20/Desktop/2026-02-16_Draft/code/Revision/workflow/3_2_CRISPR_MutationImpact.Rmd
-# mutation_impact.csv: /Users/wchen20/Desktop/2026-02-16_Draft/code/Revision/workflow/3_2_CRISPR_MutationImpact.Rmd
-```
-
-# Set path
-```{r}
-path_figure <- "/Users/wchen20/Desktop/2026-02-16_Draft/Revision_Figures/Original_output/"
-path_figure = "/Users/wchen20/Desktop/2026-02-16_Draft/Revision/R2Major1/Oncogenic/"
-path_figure <- "/Users/wchen20/Desktop/2026-02-16_Draft/Revision_Figures/Original_output/check/"
-
-path_CRISPR = "/Users/wchen20/Desktop/2026-02-16_Draft/Final_Results/5_CRISPR/"
-rename_list <- fread(paste0(path_CRISPR, "/rename_list.csv"))
-rename_list$pathway <- str_to_title(rename_list$pathway)
-
-path_RRA = "/Users/wchen20/Desktop/2026-02-16_Draft/Final_Results/5_CRISPR/"
-
-path_mut = "/Users/wchen20/Desktop/2026-02-16_Draft/Final_Results/6_MutationFreq/"
-path_mutImpact = "/Users/wchen20/Desktop/2026-02-16_Draft/Final_Results/6_MutationFreq/mutation_impact/"
-path_oncoKB = "/Users/wchen20/Desktop/2026-02-16_Draft/Final_Results/6_MutationFreq/mutation_impact/oncoKB/"
-```
-
-## SFigure 13
+# SFigure 12
 ```{r}
 ## Oncogenic mutations in pathways
 col_map <- c(
@@ -93,7 +68,7 @@ version = "new"
 
 for (cell_type in cell_types) {
   
-  CRISPR_path <- paste0("/Users/wchen20/Desktop/PCAWG/CRISPR/CRISPRscreen20240118/", cell_type)
+  CRISPR_path <- paste0("~/Desktop/PCAWG/CRISPR/CRISPRscreen20240118/", cell_type)
   
   for (reg in regulators) {
     

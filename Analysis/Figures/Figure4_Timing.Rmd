@@ -27,52 +27,10 @@ gritic_path <- paste0(PCAWG_path, "/MHC_evolution/GRITIC/output")
 source("/Users/wchen20/Desktop/PCAWG/code/source/basic.R")
 source("/Users/wchen20/Desktop/PCAWG/code/source/insert_newlines.R")
 source("/Users/wchen20/Desktop/PCAWG/code/source/plot_segTiming.R")
-
-## Clinical data
-LOH_MSI = LOH_mut <- fread(paste0(PCAWG_path, "/donors_and_biospecimens/LOH_MSI_final.csv"))
-
-LOH_type <- LOH_MSI %>% mutate(sample_id = aliquot_id) %>% dplyr::select(sample_id, histology_abbreviation)
-LOH_aliquot <- LOH_MSI %>% mutate(sample_id = aliquot_id) %>% dplyr::select(sample_id, icgc_sample_id, MSI_mut)
-sample_MSS <- LOH_MSI %>% filter(MSI_mut == "MSS") %>% pull(aliquot_id)
-type_list <- LOH_MSI %>% dplyr::select(aliquot_id, histology_abbreviation)
-
-## Timing of segment gain
-#seg <- fread(paste0(PCAWG_path, "/MHC_evolution/GRITIC/output/SNV_timing/wenjie_posterior_pcawg.tsv"))
-
-## Timing of WGD
-wgd_median <- fread("/Users/wchen20/Desktop/PCAWG/MHC_evolution/GRITIC/output/wgd_median.csv") %>% dplyr::select(wgd_mediantiming, sample_id)
-
-## Timing of non-synonymous mutations
-nonsyn_filter_nonPloy <- fread("/Users/wchen20/Desktop/PCAWG/MHC_evolution/GRITIC/output/filter/griticnon_filterclonal.tsv") %>%
-  dplyr::select(-matches("\\.y$"), -Sample) %>%
-  rename_with(~ str_replace_all(., "\\.x$", "")) %>% 
-  filter(sample_id %in% sample_MSS)
-
-sample_sucess <- unique(nonsyn_filter_nonPloy$sample_id)
-type_sucess <- nonsyn_filter_nonPloy %>% distinct(sample_id, histology_abbreviation) 
-freq_sucess <- as.data.frame(table(type_sucess$histology_abbreviation)) %>% 
-  setNames(c("histology_abbreviation", "Freq")) %>% filter(histology_abbreviation != "Cervix-AdenoCA") 
-
-## Save Path
-gritic_path = "/Users/wchen20/Desktop/PCAWG/MHC_evolution/GRITIC/output/250717/summary250717/"
 ```
 
 # 2. Pathway Timing -- Median Timing
 ```{r}
-# Driver mutation
-path_save = "/Users/wchen20/Desktop/PCAWG/MHC_evolution/GRITIC/output/allmutation/mafgritic_nonsyn/pathway/min_drivermutation_250/"
-path_plot = "/Users/wchen20/Desktop/2026-02-16_Draft/Revision/R1Major5/pathway_min/min_5/min_drivermutation/"
-path_figure = "/Users/wchen20/Desktop/2026-02-16_Draft/Revision_Figures/Original_output/Figures/"
-
-data_timing_ratio <- fread(paste0(path_save, "/nonsyn_filter_diff.csv")) %>% 
-  mutate(sample_id = Tumor_Sample_Barcode) %>% 
-  mutate(Tumor_Sample_Barcode %in% sample_sucess) %>% 
-  distinct(sample_id, .keep_all = F) %>% 
-  inner_join(LOH_type, by = "sample_id")
-
-freq_sucess <- as.data.frame(table(data_timing_ratio$histology_abbreviation))
-names(freq_sucess) <- c("histology_abbreviation", "Freq")
-
 # Process the data
 LOH_MSI_type <- LOH_MSI %>% filter(MSI_mut == "MSS") %>% dplyr::select(aliquot_id, histology_abbreviation)
 cell_types_order <- c("MHCregulators", "Tcells", "NKcells", "Macrophages", "GammadeltaTcells")
@@ -81,9 +39,27 @@ regulator_order  <- c("Pos", "Neg")
 regulator_order  <- rev(regulator_order)
 scaling_factor   <- 2.5  
 
-diff_all <- fread("/Users/wchen20/Desktop/PCAWG/MHC_evolution/GRITIC/output/allmutation/mafgritic_nonsyn/pathway/min_drivermutation_250/diff_all.csv")
+diff_all <- fread(paste0(path_MutationTiming, "/min_drivermutation_250/diff_all.csv"))
+
+pathway_selected <- diff_all %>%
+  group_by(pathway) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  ungroup() %>%
+  filter(count >= 40) %>%
+  pull(pathway)
+
+summary_df <- diff_all %>%
+  group_by(histology_abbreviation, pathway) %>%
+  summarise(
+    median = median(median_value, na.rm = TRUE),
+    lower95 = quantile(median_value, 0.025, na.rm = TRUE),
+    upper95 = quantile(median_value, 0.975, na.rm = TRUE),
+    n = sum(!is.na(median_value)),
+    .groups = "drop"
+  )
 
 data_bin <- diff_all %>%
+  filter(pathway %in% pathway_selected) %>%
   group_by(pathway, histology_abbreviation) %>%
   summarise(count = n(), .groups = "drop") %>%
   inner_join(., diff_all, by = c("histology_abbreviation", "pathway")) %>%
@@ -241,8 +217,8 @@ p <- ggplot(data_pies) +
   theme_minimal() +
   theme(
     plot.margin = margin(t = 10, b = 10, l = 5, r = 5),
-    axis.text.x = element_text(angle = 90, hjust = 1, size = 12, v = 0.5, color = "black"),
-    axis.text.y = ggtext::element_markdown(size = 12, margin = margin(r = 4)),
+    axis.text.x = element_text(angle = 90, hjust = 1, size = 10, v = 0.5, color = "black"),
+    axis.text.y = ggtext::element_markdown(size = 10, margin = margin(r = 4)),
     panel.grid = element_blank(),
     axis.ticks = element_line(color = "black"),
     axis.line = element_line(color = "black"),
@@ -250,5 +226,5 @@ p <- ggplot(data_pies) +
   ) 
 
 # Save
-ggsave(paste0(path_figure, "/Figure4.pdf"), p, width = 10, height = 12, units = "in")
+ggsave(paste0(path_figure, "/Figure4A.pdf"), p, width = 10, height = 12, units = "in")
 ```

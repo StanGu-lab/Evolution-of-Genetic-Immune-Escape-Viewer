@@ -9,7 +9,7 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-# 0. Load packacges
+# 0. Load packages
 ```{r}
 rm(list = ls())
 
